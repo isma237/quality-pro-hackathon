@@ -1,4 +1,5 @@
 **/__tests__/
 **/.aws-sam
 **/node_modules
-*.zip
+**/*.zip
+src/lambda-infra/audio/*.zip

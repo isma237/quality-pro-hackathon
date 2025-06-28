@@ -35,80 +35,6 @@ Parameters:
     Default: >
       Analyse la conversation suivante selon les consignes strictes ci-dessous:
     Description: Prompt template pour Bedrock
-  PromptStatutResolution:
-    Type: String
-    Default: >
-      Analyze this call transcript and indicate simply with "Oui" or "Non" if the customer's issue was resolved by the end of the conversation. The response should be in french
-  PromptResumeGeneral:
-    Type: String
-    Default: >
-      Briefly summarize this phone conversation in 3-5 natural sentences. Mention the reason for the call, the agent's actions, and the outcome for the customer, without using generic phrases like "After analysis..." or "As an expert...".
-  PromptResultatsConversation:
-    Type: String
-    Default: >
-      Identify the concrete solutions offered to the customer in this transcript. Directly quote the passages where the agent explains these solutions, preserving the original language.
-  
-  SatisfactionScorePrompt:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this question: "Overall, how satisfied are you with the quality of service provided by our call center?"
-      Customer response: [INSERT RESPONSE]
-      Provide only a single number from 1-5 representing the satisfaction score (1=Very dissatisfied, 5=Very satisfied).
-
-  TimeAdequacyScorePrompt:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this statement: "My request was handled within a reasonable timeframe."
-      Provide only a single number from 1-5 representing agreement with the statement (1=Strongly disagree, 5=Strongly agree).
-
-  AssistanceAdequacyScorePrompt:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this statement: "The assistance I received was perfectly suited to my needs."
-      Provide only a single number from 1-5 representing the adequacy score (1=Not at all adequate, 5=Perfectly adequate).
-
-  EasyOfResolutionScorePrompt:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this question: "How easy was it to get a resolution to your request?"
-      Provide only a single number from 1-5 representing the ease score (1=Very difficult, 5=Very easy).
-
-  NetPromoterScorePrompt:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this question: "How likely are you to recommend our service to a friend or colleague?"
-      Provide only a single number from 0-10 representing the likelihood to recommend.
-
-
-  SatisfactionVerbatimPrompt:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this question: "What is the reason for your satisfaction?"
-      Provide only a single direct quote (verbatim) that best captures the main reason for satisfaction.
-  
-  DissatisfactionVerbatimPrompt:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this question: "What is the reason for your dissatisfaction?"
-      Provide only a single direct quote (verbatim) that best captures the main reason for dissatisfaction.
-
-  ResolutionPromptStatus:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this question: "Has your request been definitively resolved to date?"
-      Provide only one of these three statuses: "Resolved", "Partially resolved", or "Not resolved".
-
-  MainImprovementSuggestionPrompt:
-    Type: String
-    Default: >
-      Analyze only the following customer response to this question: "What could we improve in our service?"
-      Provide only a single direct quote (verbatim) that best captures the main improvement suggestion.
-
-  ConversationAnalysisPrompt:
-    Type: String
-    Default: >
-      Act as an expert in customer experience quality analysis and call analytics. Analyze the following call transcript between an agent and a customer. Focus on identifying critical signals and Return ONLY this JSON with ALL VALUES in French: { "risk_assessment": { "churn_risk_level": "Faible/Moyen/Eleve", "churn_probability": 0-100, "churn_signals": ["signal1", "signal2"], "urgent_callback_required": true/false, "callback_reason": "raison si true" }, "conversation_metrics": { "agent_talk_ratio": 0-100, "interruption_count": 0-20, "emotional_progression": ["emotion1", "emotion2", "emotion3"], "peak_emotion": "emotion principale", "peak_emotion_trigger": "declencheur", "dominant_sentiment": "Positif/Neutre/Negatif" }, "verbatims": { "critical_statement": "citation du probleme principal", "positive_highlight": "citation positive si presente", "improvement_request": "citation d amelioration si presente", "churn_threat": "citation de menace de depart si presente" } } Use numbers for numeric values, true/false without quotes, 1-3 items per array, concise French text.
-
 
 Resources:
 
@@ -508,17 +434,6 @@ Resources:
         Variables:
           ENV: !Ref Environment
           BEDROCK_PROMPT: !Ref BedrockPrompt
-          #PromptResumeGeneral: !Ref PromptResumeGeneral
-          #PromptStatutResolution: !Ref PromptStatutResolution
-          #PromptResultatsConversation: !Ref PromptResultatsConversation
-          #PromptProblemeClient: !Ref PromptProblemeClient
-          #PromptNecessiteRappel: !Ref PromptNecessiteRappel
-          #PromptIdentificationSujet: !Ref PromptIdentificationSujet
-          #PromptIdentificationProduit: !Ref PromptIdentificationProduit
-          #PromptEvaluationPolitesse: !Ref PromptEvaluationPolitesse
-          #PromptEvaluationQualite: !Ref PromptEvaluationQualite
-          #PromptActionAgent: !Ref PromptActionAgent
-          #PromptBilanGlobal: !Ref PromptBilanGlobal
       Tags:
       - Key: Project
         Value: !Ref Project
@@ -563,16 +478,6 @@ Resources:
       Environment:
         Variables:
           ENV: !Ref Environment
-          SATISFACTION_SCORE_PROMPT: !Ref SatisfactionScorePrompt
-          TIME_ADEQUACY_SCORE_PROMPT: !Ref TimeAdequacyScorePrompt
-          ASSISTANCE_ADEQUACY_SCORE_PROMPT: !Ref AssistanceAdequacyScorePrompt
-          EASY_OF_RESOLUTION_SCORE_PROMPT: !Ref EasyOfResolutionScorePrompt
-          NET_PROMOTER_SCORE_PROMPT: !Ref NetPromoterScorePrompt
-          SATISFACTION_VERBATIM_PROMPT: !Ref SatisfactionVerbatimPrompt
-          DISSATISFACTION_VERBATIM_PROMPT: !Ref DissatisfactionVerbatimPrompt
-          RESOLUTION_PROMPT_STATUS: !Ref ResolutionPromptStatus
-          MAIN_IMPROVEMENT_SUGGESTION_PROMPT: !Ref MainImprovementSuggestionPrompt
-          CONVERSATION_ANALYSIS_PROMPT: !Ref ConversationAnalysisPrompt
           TABLE_NAME: !Ref TABLENAME          
       Tags:
         - Key: Project
