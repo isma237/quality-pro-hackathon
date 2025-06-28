@@ -2,17 +2,90 @@ import os
 import boto3
 import json
 import logging
-import re  # Added missing import for regular expressions
+import re
 
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Initialize Bedrock client at module level (reused across invocations)
+# Initialize Bedrock client at module level
 bedrock_runtime = boto3.client(
     'bedrock-runtime',
     region_name='us-west-2',
 )
+# Variable globale pour le cache
+_prompts_config_cache = None
+
+def load_prompts_config():
+    """Charge la configuration des prompts depuis le fichier JSON"""
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), 'prompts-config.json')
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return config
+    except FileNotFoundError:
+        logger.error(f"Fichier prompts-config.json non trouvé")
+        raise
+    except json.JSONDecodeError as e:
+        logger.error(f"Erreur de parsing JSON: {str(e)}")
+        raise
+
+def get_prompts_config():
+    """Récupère la configuration avec mise en cache"""
+    global _prompts_config_cache
+    if _prompts_config_cache is None:
+        _prompts_config_cache = load_prompts_config()
+        logger.info("Configuration des prompts chargée et mise en cache")
+    return _prompts_config_cache
+
+def build_dynamic_prompt(template_key, config):
+    """
+    Construit dynamiquement les prompts en utilisant les catégories du JSON
+    
+    Args:
+        template_key (str): Clé du template ('identification_sujet' ou 'identification_produit')
+        config (dict): Configuration complète
+    
+    Returns:
+        str: Prompt complet avec les catégories intégrées
+    """
+    prompts = config['prompts']['categorization']
+    
+    if template_key == 'identification_sujet':
+        # Construire la liste des catégories
+        categories_list = ""
+        for category_name, keywords in config['categories'].items():
+            category_title = category_name.replace('_', ' ').title()
+            keywords_str = ', '.join(keywords)
+            categories_list += f"{category_title}: {keywords_str}\n"
+        
+        # Construire les exemples
+        examples = '\n'.join([f"* {example}" for example in config['examples']['subject_classification']])
+        
+        # Remplacer dans le template
+        return prompts['identification_sujet_template'].format(
+            categories_list=categories_list.strip(),
+            examples=examples
+        )
+    
+    elif template_key == 'identification_produit':
+        # Construire la liste des catégories de produits
+        product_categories_list = ""
+        for category_name, products in config['product_categories'].items():
+            category_title = category_name.replace('_', ' ').title()
+            products_str = ', '.join(products)
+            product_categories_list += f"{category_title}: {products_str}\n"
+        
+        # Construire les exemples
+        product_examples = '\n'.join([f"* {example}" for example in config['examples']['product_identification']])
+        
+        # Remplacer dans le template
+        return prompts['identification_produit_template'].format(
+            product_categories_list=product_categories_list.strip(),
+            product_examples=product_examples
+        )
+    
+    return None
 
 def clean_response(text):
     """
@@ -133,18 +206,13 @@ def invoke_bedrock(input_text, prompt=None):
 
 
 def lambda_handler(event, context):
-    """
-    Main Lambda handler function
-    
-    Args:
-        event (dict): Lambda event data
-        context: Lambda context
-        
-    Returns:
-        dict: Response containing Bedrock results
-    """
+    """Main Lambda handler avec prompts dynamiques"""
     try:
         logger.info(f"Received event: {json.dumps(event)}")
+        
+        # Charger la configuration
+        config = get_prompts_config()
+        prompts = config['prompts']
         
         # Extract input text from the event
         input_text = event.get('originalText', '')
@@ -158,35 +226,61 @@ def lambda_handler(event, context):
                 'fileNameKey': file_name_key,
             }
         
-        # Call Bedrock using our helper function
-        prompt_actions_agent = invoke_bedrock(input_text, prompt=os.environ['PromptActionAgent'])
-        prompt_evaluation_qualite = invoke_bedrock(input_text, prompt=os.environ['PromptEvaluationQualite'])
-        prompt_evaluation_politesse = invoke_bedrock(input_text, prompt=os.environ['PromptEvaluationPolitesse'])
-        prompt_identification_produit = invoke_bedrock(input_text, prompt=os.environ['PromptIdentificationProduit'])
-        prompt_identification_sujet = invoke_bedrock(input_text, prompt=os.environ['PromptIdentificationSujet'])
-        prompt_necessite_rappel = invoke_bedrock(input_text, prompt=os.environ['PromptNecessiteRappel'])
-        prompt_probleme_client = invoke_bedrock(input_text, prompt=os.environ['PromptProblemeClient'])
-        prompt_resultats_conversation = invoke_bedrock(input_text, prompt=os.environ['PromptResultatsConversation'])
-        prompt_resume_general = invoke_bedrock(input_text, prompt=os.environ['PromptResumeGeneral'])
-        prompt_statut_resolution = invoke_bedrock(input_text, prompt=os.environ['PromptStatutResolution'])
-        prompt_bilan_global = invoke_bedrock(input_text, prompt=os.environ['PromptBilanGlobal'])
-
+        # Utiliser les prompts dynamiques pour la catégorisation
+        prompt_identification_sujet = build_dynamic_prompt('identification_sujet', config)
+        prompt_identification_produit = build_dynamic_prompt('identification_produit', config)
         
+        # Invoquer Bedrock avec les prompts construits dynamiquement
+        results = {
+            'prompt_actions_agent': invoke_bedrock(
+                input_text, 
+                prompt=prompts['conversation_analysis']['action_agent']
+            ),
+            'prompt_evaluation_qualite': invoke_bedrock(
+                input_text, 
+                prompt=prompts['quality_evaluation']['evaluation_qualite']
+            ),
+            'prompt_evaluation_politesse': invoke_bedrock(
+                input_text, 
+                prompt=prompts['quality_evaluation']['evaluation_politesse']
+            ),
+            'prompt_identification_produit': invoke_bedrock(
+                input_text, 
+                prompt=prompt_identification_produit
+            ),
+            'prompt_identification_sujet': invoke_bedrock(
+                input_text, 
+                prompt=prompt_identification_sujet
+            ),
+            'prompt_necessite_rappel': invoke_bedrock(
+                input_text, 
+                prompt=prompts['conversation_analysis']['necessite_rappel']
+            ),
+            'prompt_probleme_client': invoke_bedrock(
+                input_text, 
+                prompt=prompts['conversation_analysis']['probleme_client']
+            ),
+            'prompt_resultats_conversation': invoke_bedrock(
+                input_text, 
+                prompt=prompts['conversation_analysis']['resultats_conversation']
+            ),
+            'prompt_resume_general': invoke_bedrock(
+                input_text, 
+                prompt=prompts['conversation_analysis']['resume_general']
+            ),
+            'prompt_statut_resolution': invoke_bedrock(
+                input_text, 
+                prompt=prompts['conversation_analysis']['statut_resolution']
+            ),
+            'prompt_bilan_global': invoke_bedrock(
+                input_text, 
+                prompt=prompts['quality_evaluation']['bilan_global']
+            ),
+        }
+
         return {
             'statusCode': 200,
-            'bedrockResult': {
-                'prompt_actions_agent': prompt_actions_agent,
-                'prompt_evaluation_qualite': prompt_evaluation_qualite,
-                'prompt_evaluation_politesse': prompt_evaluation_politesse,
-                'prompt_identification_produit': prompt_identification_produit,
-                'prompt_identification_sujet': prompt_identification_sujet,
-                'prompt_necessite_rappel': prompt_necessite_rappel,
-                'prompt_probleme_client': prompt_probleme_client,
-                'prompt_resultats_conversation': prompt_resultats_conversation,
-                'prompt_resume_general': prompt_resume_general,
-                'prompt_statut_resolution': prompt_statut_resolution,
-                'prompt_bilan_global': prompt_bilan_global,
-            },
+            'bedrockResult': results,
             'fileNameKey': file_name_key,
             'analysis': analysis,
         }

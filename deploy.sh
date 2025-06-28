@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Environment variables
-DEPLOYMENT_BUCKET="quality-pro-deployment-artifacts-$(date +%s)"
-STACK_NAME="quality-pro-stack-hack"
-SAM_STACK_NAME="quality-pro-backend-${UNIQUE_ID}"
 UNIQUE_ID=$(date +%s | cut -c 6-10)
-ENV_TYPE="prod"
+ENV_TYPE="isma-dev"
+DEPLOYMENT_BUCKET="quality-pro-deployment-artifacts-$(date +%s)"
+STACK_NAME="quality-pro-stack-${ENV_TYPE}-${UNIQUE_ID}"
+SAM_STACK_NAME="quality-pro-backend-${ENV_TYPE}-${UNIQUE_ID}"
 PROJECT_NAME="quality-pro-cmr"
 OWNER="ismael-gadji-cmr"
 
@@ -21,6 +21,17 @@ echo "Bucket S3: $BUCKET_NAME"
 echo "State Machine: $STATE_MACHINE_NAME"
 echo "Table DynamoDB: $DYNAMO_TABLE_NAME"
 
+
+# Create temporary S3 bucket for deployment
+echo "=== Creating temporary S3 bucket for deployment ==="
+aws s3 mb s3://$DEPLOYMENT_BUCKET
+
+cd src/lambda-infra/audio
+export LAMBDA_ARTIFACTS_BUCKET="$DEPLOYMENT_BUCKET"
+chmod +x publish_lamba.sh
+./publish_lamba.sh
+cd ../../../cloudformation
+
 cd cloudformation
 
 # Check CloudFormation stack status
@@ -35,9 +46,6 @@ if [ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]; then
   echo "Old stack removed successfully."
 fi
 
-# Create temporary S3 bucket for deployment
-echo "=== Creating temporary S3 bucket for deployment ==="
-aws s3 mb s3://$DEPLOYMENT_BUCKET
 
 # Package CloudFormation template (upload local files to S3)
 echo "=== Packaging CloudFormation templates ==="
@@ -52,7 +60,7 @@ aws cloudformation deploy \
   --template-file packaged-template.yml \
   --stack-name $STACK_NAME \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-  --parameter-overrides Environment=$ENV_TYPE DeploymentId=$UNIQUE_ID Project=$PROJECT_NAME Owner=$OWNER AudioBucketName=$BUCKET_NAME StateMachineName=$STATE_MACHINE_NAME TABLENAME=$DYNAMO_TABLE_NAME
+  --parameter-overrides Environment=$ENV_TYPE DeploymentId=$UNIQUE_ID Project=$PROJECT_NAME Owner=$OWNER AudioBucketName=$BUCKET_NAME StateMachineName=$STATE_MACHINE_NAME TABLENAME=$DYNAMO_TABLE_NAME BucketForLambdaArtefact=$DEPLOYMENT_BUCKET
 
 # Check if CloudFormation deployment was successful
 if [ $? -ne 0 ]; then
@@ -106,7 +114,3 @@ if [ $? -eq 0 ]; then
 else
   echo "SAM deployment failed. Check logs for more details."
 fi
-
-
-echo "=== Cleaning up temporary bucket ==="
-aws s3 rb s3://$DEPLOYMENT_BUCKET --force

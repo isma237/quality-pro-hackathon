@@ -14,6 +14,30 @@ bedrock_runtime = boto3.client(
     region_name='us-west-2',
 )
 
+_prompts_config_cache = None
+
+def load_prompts_config():
+    """Charge la configuration des prompts depuis le fichier JSON"""
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), 'prompts-config.json')
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return config
+    except FileNotFoundError:
+        logger.error(f"Fichier prompts-config.json non trouvé")
+        raise
+    except json.JSONDecodeError as e:
+        logger.error(f"Erreur de parsing JSON: {str(e)}")
+        raise
+
+def get_prompts_config():
+    """Récupère la configuration avec mise en cache"""
+    global _prompts_config_cache
+    if _prompts_config_cache is None:
+        _prompts_config_cache = load_prompts_config()
+        logger.info("Configuration des prompts chargée et mise en cache")
+    return _prompts_config_cache
+
 def clean_response(text):
     """
     Nettoie et formate correctement la réponse du modèle
@@ -89,7 +113,11 @@ def invoke_bedrock(input_text, prompt=None):
     """
     try:
         # Use provided prompt or get from environment variable
-        bedrock_prompt = prompt or os.environ['BEDROCK_PROMPT']
+        if prompt is None:
+            config = get_prompts_config()
+            bedrock_prompt = config['prompts']['base']['bedrock_prompt']
+        else:
+            bedrock_prompt = prompt
 
         full_prompt = f"{bedrock_prompt}: {input_text}"
 
@@ -147,6 +175,9 @@ def lambda_handler(event, context):
     """
     try:
         logger.info(f"Received event: {json.dumps(event)}")
+
+        config = get_prompts_config()
+        prompts = config['prompts']
         
         # Extract input text from the event
         input_text = event.get('originalText', '')
@@ -160,32 +191,70 @@ def lambda_handler(event, context):
                 'fileNameKey': file_name_key,
             }
         
-        # Call Bedrock using our helper function
-        SatisfactionScorePrompt = invoke_bedrock(input_text, prompt=os.environ['SATISFACTION_SCORE_PROMPT'])
-        TimeAquecyScorePrompt = invoke_bedrock(input_text, prompt=os.environ['TIME_ADEQUACY_SCORE_PROMPT'])
-        AssistanceAdequacyScorePrompt = invoke_bedrock(input_text, prompt=os.environ['ASSISTANCE_ADEQUACY_SCORE_PROMPT'])
-        EasyOfResponseScorePrompt = invoke_bedrock(input_text, prompt=os.environ['EASY_OF_RESOLUTION_SCORE_PROMPT'])
-        NetPromoterScorePrompt = invoke_bedrock(input_text, prompt=os.environ['NET_PROMOTER_SCORE_PROMPT'])
-        SatisfactionVerbatimPrompt = invoke_bedrock(input_text, prompt=os.environ['SATISFACTION_VERBATIM_PROMPT'])
-        DissatisfactionVerbatimPrompt = invoke_bedrock(input_text, prompt=os.environ['DISSATISFACTION_VERBATIM_PROMPT'])
-        ResolutionPromptStatus = invoke_bedrock(input_text, prompt=os.environ['RESOLUTION_PROMPT_STATUS'])
-        MainImprovmentSuggestionsPrompt = invoke_bedrock(input_text, prompt=os.environ['MAIN_IMPROVEMENT_SUGGESTION_PROMPT'])
-        ConversationAnalysisPrompt = invoke_bedrock(input_text, prompt=os.environ['CONVERSATION_ANALYSIS_PROMPT'])
-
+        # Utiliser les prompts du fichier JSON au lieu des variables d'environnement
+        satisfaction_score = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['satisfaction_score']
+        )
         
+        time_adequacy_score = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['time_adequacy_score']
+        )
+        
+        assistance_adequacy_score = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['assistance_adequacy_score']
+        )
+        
+        easy_of_resolution_score = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['easy_of_resolution_score']
+        )
+        
+        net_promoter_score = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['net_promoter_score']
+        )
+        
+        satisfaction_verbatim = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['satisfaction_verbatim']
+        )
+        
+        dissatisfaction_verbatim = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['dissatisfaction_verbatim']
+        )
+        
+        resolution_status = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['resolution_status']
+        )
+        
+        main_improvement_suggestion = invoke_bedrock(
+            input_text, 
+            prompt=prompts['post_call_survey']['main_improvement_suggestion']
+        )
+        
+        conversation_analysis = invoke_bedrock(
+            input_text, 
+            prompt=prompts['advanced_analysis']['conversation_analysis']
+        )
+
         return {
             'statusCode': 200,
             'bedrockResult': {
-                'satisfaction_globale': SatisfactionScorePrompt,
-                'time_adequacy': TimeAquecyScorePrompt,
-                'assistance_adequacy': AssistanceAdequacyScorePrompt,
-                'easy_of_response': EasyOfResponseScorePrompt,
-                'net_promoter': NetPromoterScorePrompt,
-                'satisfaction_verbatim': SatisfactionVerbatimPrompt,
-                'dissatisfaction_verbatim': DissatisfactionVerbatimPrompt,
-                'resolution_prompt_status': ResolutionPromptStatus,
-                'main_improvement_suggestions': MainImprovmentSuggestionsPrompt,
-                'conversation_analysis': json.loads(ConversationAnalysisPrompt),
+                'satisfaction_globale': satisfaction_score,
+                'time_adequacy': time_adequacy_score,
+                'assistance_adequacy': assistance_adequacy_score,
+                'easy_of_response': easy_of_resolution_score,
+                'net_promoter': net_promoter_score,
+                'satisfaction_verbatim': satisfaction_verbatim,
+                'dissatisfaction_verbatim': dissatisfaction_verbatim,
+                'resolution_prompt_status': resolution_status,
+                'main_improvement_suggestions': main_improvement_suggestion,
+                'conversation_analysis': json.loads(conversation_analysis),
             },
             'fileNameKey': file_name_key,
             'analysis': analysis,

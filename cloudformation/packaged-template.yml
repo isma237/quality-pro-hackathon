@@ -17,6 +17,10 @@ Parameters:
     Type: String
     Default: file-processing-statemachine-${Environment}
     Description: Name of the Step Function state machine
+  BucketForLambdaArtefact:
+    Type: String
+    Default: quality-pro-lambda-artifacts-${Environment}
+    Description: Name of the S3 bucket for Lambda artifacts
   Owner:
     Type: String
     Default: quality-team
@@ -45,59 +49,6 @@ Parameters:
     Default: "Identify the concrete solutions offered to the customer in this transcript.\
       \ Directly quote the passages where the agent explains these solutions, preserving\
       \ the original language.\n"
-  PromptProblemeClient:
-    Type: String
-    Default: "Identify the precise moment when the customer explains their problem\
-      \ or formulates their request. Quote their own words without rephrasing.\n"
-  PromptNecessiteRappel:
-    Type: String
-    Default: "Is a customer callback necessary or was it promised by the agent? Answer\
-      \ only with \"Oui\" or \"Non\" or.\n"
-  PromptIdentificationSujet:
-    Type: String
-    Default: "Identify the main topic of this conversation in one or two keywords\
-      \ (service, product, or type of request).\n"
-  PromptIdentificationProduit:
-    Type: String
-    Default: "From the following call transcript, identify and extract the specific\
-      \ product or service mentioned by the customer. Focus on details that clearly\
-      \ indicate which product or service is involved in the conversation.\n"
-  PromptEvaluationPolitesse:
-    Type: String
-    Default: "Did the agent maintain an appropriate level of politeness and professionalism\
-      \ throughout the conversation? Answer only with \"yes\" or \"no\". The response\
-      \ should be in french\n"
-  PromptEvaluationQualite:
-    Type: String
-    Default: "Identify any actions that remain to be done after this call, either\
-      \ by the customer or by the company. If no actions are pending, indicate \"\
-      No pending actions\".\n"
-  PromptActionAgent:
-    Type: String
-    Default: "List the concrete actions taken by the agent during this call in list\
-      \ of points. Start each point with an action verb without generic introductory\
-      \ phrasing.\n"
-  PromptBilanGlobal:
-    Type: String
-    Default: "Below is a transcript of a call between a customer service agent and\
-      \ a customer. Your role is to evaluate the agent's performance from a customer\
-      \ experience (CX) quality management perspective. Provide your response ONLY\
-      \ in JSON format with the following fields. The campaign objectives are: reducing\
-      \ call duration, empowering the customer, and guiding them to the fastest solution.\
-      \ json { \"resume_probleme\": \"\", \"resume_solution\": \"\", \"clarte_concision\"\
-      : { \"valeur\": true/false, \"explication\": \"\" }, \"canaux_alternatifs_proposes\"\
-      : [\"\", \"\"], \"repetitions_detectees\": { \"valeur\": true/false, \"exemples\"\
-      : [\"\", \"\"] }, \"appel_trop_long\": { \"valeur\": [true si la durée réelle\
-      \ dépasse la durée optimale estimée, false sinon], \"duree_estimee_optimale_minutes\"\
-      : [votre estimation de la durée optimale pour ce type d'appel, basée sur le\
-      \ contenu] }, \"issue_claire_pour_client\": true/false, \"suggestions_amelioration\"\
-      : [ \"\", \"\", \"\" ], \"score_global_sur_10\": [score] } Analyze the transcript\
-      \ thoroughly before providing your assessment. Focus on: How clearly the agent\
-      \ communicated Whether they offered self-service alternatives If they repeated\
-      \ information unnecessarily If the call could have been shorter Whether the\
-      \ outcome was clear to the customer Specific, actionable improvement suggestions\
-      \ Remember the key objectives: shorter calls, customer empowerment, and fastest\
-      \ resolution path.\n"
   SatisfactionScorePrompt:
     Type: String
     Default: "Analyze only the following customer response to this question: \"Overall,\
@@ -175,6 +126,19 @@ Resources:
         - Id: ExpireOldVersions
           Status: Enabled
           NoncurrentVersionExpirationInDays: 90
+      CorsConfiguration:
+        CorsRules:
+        - AllowedHeaders:
+          - '*'
+          AllowedMethods:
+          - PUT
+          - POST
+          - GET
+          - HEAD
+          AllowedOrigins:
+          - '*'
+          ExposedHeaders:
+          - ETag
       NotificationConfiguration:
         QueueConfigurations:
         - Event: s3:ObjectCreated:*
@@ -187,6 +151,46 @@ Resources:
               Rules:
               - Name: suffix
                 Value: .mp3
+        - Event: s3:ObjectCreated:*
+          Queue:
+            Fn::GetAtt:
+            - FileProcessingQueue
+            - Arn
+          Filter:
+            S3Key:
+              Rules:
+              - Name: suffix
+                Value: .wav
+        - Event: s3:ObjectCreated:*
+          Queue:
+            Fn::GetAtt:
+            - FileProcessingQueue
+            - Arn
+          Filter:
+            S3Key:
+              Rules:
+              - Name: suffix
+                Value: .m4a
+        - Event: s3:ObjectCreated:*
+          Queue:
+            Fn::GetAtt:
+            - FileProcessingQueue
+            - Arn
+          Filter:
+            S3Key:
+              Rules:
+              - Name: suffix
+                Value: .flac
+        - Event: s3:ObjectCreated:*
+          Queue:
+            Fn::GetAtt:
+            - FileProcessingQueue
+            - Arn
+          Filter:
+            S3Key:
+              Rules:
+              - Name: suffix
+                Value: .ogg
       Tags:
       - Key: Environment
         Value:
@@ -289,7 +293,8 @@ Resources:
         - FileProcessingFunctionRole
         - Arn
       Code:
-        S3Bucket: quality-pro-cfn-templates
+        S3Bucket:
+          Ref: BucketForLambdaArtefact
         S3Key: lambdas/transcript.zip
       DeadLetterConfig:
         TargetArn:
@@ -370,7 +375,8 @@ Resources:
         - GetTranscriptFunctionRole
         - Arn
       Code:
-        S3Bucket: quality-pro-cfn-templates
+        S3Bucket:
+          Ref: BucketForLambdaArtefact
         S3Key: lambdas/get_transcript.zip
       Environment:
         Variables:
@@ -437,7 +443,8 @@ Resources:
         - ComprehendFunctionRole
         - Arn
       Code:
-        S3Bucket: quality-pro-cfn-templates
+        S3Bucket:
+          Ref: BucketForLambdaArtefact
         S3Key: lambdas/comprehend.zip
       Environment:
         Variables:
@@ -481,7 +488,8 @@ Resources:
         - StepFunctionTriggerFunctionRole
         - Arn
       Code:
-        S3Bucket: quality-pro-cfn-templates
+        S3Bucket:
+          Ref: BucketForLambdaArtefact
         S3Key: lambdas/stepfunction_trigger.zip
       Environment:
         Variables:
@@ -579,7 +587,8 @@ Resources:
         - BedrockEvaluateFunctionRole
         - Arn
       Code:
-        S3Bucket: quality-pro-cfn-templates
+        S3Bucket:
+          Ref: BucketForLambdaArtefact
         S3Key: lambdas/bedrock_evaluate.zip
       Environment:
         Variables:
@@ -587,28 +596,6 @@ Resources:
             Ref: Environment
           BEDROCK_PROMPT:
             Ref: BedrockPrompt
-          PromptResumeGeneral:
-            Ref: PromptResumeGeneral
-          PromptStatutResolution:
-            Ref: PromptStatutResolution
-          PromptResultatsConversation:
-            Ref: PromptResultatsConversation
-          PromptProblemeClient:
-            Ref: PromptProblemeClient
-          PromptNecessiteRappel:
-            Ref: PromptNecessiteRappel
-          PromptIdentificationSujet:
-            Ref: PromptIdentificationSujet
-          PromptIdentificationProduit:
-            Ref: PromptIdentificationProduit
-          PromptEvaluationPolitesse:
-            Ref: PromptEvaluationPolitesse
-          PromptEvaluationQualite:
-            Ref: PromptEvaluationQualite
-          PromptActionAgent:
-            Ref: PromptActionAgent
-          PromptBilanGlobal:
-            Ref: PromptBilanGlobal
       Tags:
       - Key: Project
         Value:
@@ -653,7 +640,8 @@ Resources:
         - BedrockEvaluateFunctionRole
         - Arn
       Code:
-        S3Bucket: quality-pro-cfn-templates
+        S3Bucket:
+          Ref: BucketForLambdaArtefact
         S3Key: lambdas/bedrock_evaluate_post_call_survey.zip
       Environment:
         Variables:
@@ -703,7 +691,8 @@ Resources:
         - StoreResponseFunctionRole
         - Arn
       Code:
-        S3Bucket: quality-pro-cfn-templates
+        S3Bucket:
+          Ref: BucketForLambdaArtefact
         S3Key: lambdas/store_response.zip
       Environment:
         Variables:
@@ -908,7 +897,8 @@ Resources:
         - WaitForTranscribeFunctionRole
         - Arn
       Code:
-        S3Bucket: quality-pro-cfn-templates
+        S3Bucket:
+          Ref: BucketForLambdaArtefact
         S3Key: lambdas/wait_for_transcribe.zip
       Environment:
         Variables:

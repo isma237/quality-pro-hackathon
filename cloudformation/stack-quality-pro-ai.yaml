@@ -18,6 +18,10 @@ Parameters:
     Type: String
     Default: file-processing-statemachine-${Environment}
     Description: Name of the Step Function state machine
+  BucketForLambdaArtefact:
+    Type: String
+    Default: quality-pro-lambda-artifacts-${Environment}
+    Description: Name of the S3 bucket for Lambda artifacts
   Owner:
     Type: String
     Default: quality-team
@@ -43,70 +47,6 @@ Parameters:
     Type: String
     Default: >
       Identify the concrete solutions offered to the customer in this transcript. Directly quote the passages where the agent explains these solutions, preserving the original language.
-  PromptProblemeClient:
-    Type: String
-    Default: >
-      Identify the precise moment when the customer explains their problem or formulates their request. Quote their own words without rephrasing.
-  PromptNecessiteRappel:
-    Type: String
-    Default: >
-      Is a customer callback necessary or was it promised by the agent? Answer only with "Oui" or "Non" or.
-  PromptIdentificationSujet:
-    Type: String
-    Default: >
-      Analyze the call transcript and identify the main topic using 1-2 keywords from the categories below.
-      Keywords by Category
-      Service Issues: billing, payment, network-outage, signal-weak, data-usage, mobile-money, airtime-transfer, service-suspension
-      Technical Support: connectivity, troubleshooting, ussd-codes, sms-issues, call-drops, network-registration
-      Account Management: sim-registration, sim-replacement, number-portability, tariff-change, account-balance, kyc-update
-      Products: data-bundles, voice-bundles, international-calling, momo-services, internet-packages, promotional-offers
-      Mobile Money: momo-transfer, momo-withdrawal, transaction-failed, momo-fees, agent-issues
-      Device/SIM: sim-blocking, sim-swap, device-unlock, phone-financing
-      Examples
-      * "Ma carte SIM est bloquée" → sim-blocking
-      * "Je veux acheter un forfait de 5GB" → data-bundles
-      * "Ma transaction / Mon transfert Orange Money a échoué" → transaction-failed
-      * "Mon réseau ne capte pas" → signal-weak
-      * "Comment transférer du crédit?" → airtime-transfer
-      Output Format
-      Return only the 1-2 most relevant keywords, comma-separated if using two and only in french.
-
-  PromptIdentificationProduit:
-    Type: String
-    Default: >
-      Extract the specific product or service mentioned by the customer from the call transcript.
-      Product Categories
-      Data Products: forfait internet, bundle data, forfait illimité, internet mobile, wifi pocket, clé internet
-      Voice Products: forfait voix, minutes gratuites, appels illimités, forfait international, roaming
-      Mobile Money: Orange Money, MTN MoMo, transfert d'argent, retrait espèces, dépôt argent, paiement factures
-      Bundles/Packages: forfait mensuel, forfait hebdomadaire, forfait journalier, pack étudiant, forfait famille
-      Value-Added Services: SMS illimités, sonneries, jeux, horoscope, info trafic, météo
-      Devices: smartphone, téléphone portable, modem, routeur, accessoires
-      Examples
-      * "Je veux le forfait internet de 10GB" → forfait internet 10GB
-      * "Mon Orange Money ne marche pas" → Orange Money
-      * "J'ai besoin d'un forfait voix pour les appels" → forfait voix
-      * "Le pack étudiant m'intéresse" → pack étudiant
-      * "Mon modem 4G a un problème" → Modem 4G
-      Output Format
-      Return the exact product/service name mentioned, including specifications (GB, duration, etc.) when provided.
-  PromptEvaluationPolitesse:
-    Type: String
-    Default: >
-      Did the agent maintain an appropriate level of politeness and professionalism throughout the conversation? Answer only with "yes" or "no". The response should be in french
-  PromptEvaluationQualite:
-    Type: String
-    Default: >
-      Identify any actions that remain to be done after this call, either by the customer or by the company. If no actions are pending, indicate "No pending actions".
-  PromptActionAgent:
-    Type: String
-    Default: >
-      List the concrete actions taken by the agent during this call in list of points. Start each point with an action verb without generic introductory phrasing.
-
-  PromptBilanGlobal:
-    Type: String
-    Default: >
-      Below is a transcript of a call between a customer service agent and a customer. Your role is to evaluate the agent's performance from a customer experience (CX) quality management perspective. Provide your response ONLY in JSON format with the following fields. The campaign objectives are: reducing call duration, empowering the customer, and guiding them to the fastest solution. json { "resume_probleme": "", "resume_solution": "", "clarte_concision": { "valeur": true/false, "explication": "" }, "canaux_alternatifs_proposes": ["", ""], "repetitions_detectees": { "valeur": true/false, "exemples": ["", ""] }, "appel_trop_long": { "valeur": [true si la durée réelle dépasse la durée optimale estimée, false sinon], "duree_estimee_optimale_minutes": [votre estimation de la durée optimale pour ce type d'appel, basée sur le contenu] }, "issue_claire_pour_client": true/false, "suggestions_amelioration": [ "", "", "" ], "score_global_sur_10": [score] } Analyze the transcript thoroughly before providing your assessment. Focus on: How clearly the agent communicated Whether they offered self-service alternatives If they repeated information unnecessarily If the call could have been shorter Whether the outcome was clear to the customer Specific, actionable improvement suggestions Remember the key objectives: shorter calls, customer empowerment, and fastest resolution path.
   
   SatisfactionScorePrompt:
     Type: String
@@ -313,7 +253,7 @@ Resources:
       Timeout: 300
       Role: !GetAtt FileProcessingFunctionRole.Arn
       Code:
-        S3Bucket: "quality-pro-cfn-templates"
+        S3Bucket: !Ref BucketForLambdaArtefact
         S3Key: lambdas/transcript.zip
       DeadLetterConfig:
         TargetArn: !GetAtt FileProcessingDLQ.Arn
@@ -380,7 +320,7 @@ Resources:
       Timeout: 60
       Role: !GetAtt GetTranscriptFunctionRole.Arn
       Code:
-        S3Bucket: "quality-pro-cfn-templates"
+        S3Bucket: !Ref BucketForLambdaArtefact
         S3Key: lambdas/get_transcript.zip
       Environment:
         Variables:
@@ -440,7 +380,7 @@ Resources:
       Timeout: 60
       Role: !GetAtt ComprehendFunctionRole.Arn
       Code:
-        S3Bucket: "quality-pro-cfn-templates"
+        S3Bucket: !Ref BucketForLambdaArtefact
         S3Key: lambdas/comprehend.zip
       Environment:
         Variables:
@@ -478,7 +418,7 @@ Resources:
       Timeout: 30
       Role: !GetAtt StepFunctionTriggerFunctionRole.Arn
       Code:
-        S3Bucket: "quality-pro-cfn-templates"
+        S3Bucket: !Ref BucketForLambdaArtefact
         S3Key: lambdas/stepfunction_trigger.zip
       Environment:
         Variables:
@@ -562,23 +502,23 @@ Resources:
       Timeout: 240
       Role: !GetAtt BedrockEvaluateFunctionRole.Arn
       Code:
-        S3Bucket: "quality-pro-cfn-templates"
+        S3Bucket: !Ref BucketForLambdaArtefact
         S3Key: lambdas/bedrock_evaluate.zip
       Environment:
         Variables:
           ENV: !Ref Environment
           BEDROCK_PROMPT: !Ref BedrockPrompt
-          PromptResumeGeneral: !Ref PromptResumeGeneral
-          PromptStatutResolution: !Ref PromptStatutResolution
-          PromptResultatsConversation: !Ref PromptResultatsConversation
-          PromptProblemeClient: !Ref PromptProblemeClient
-          PromptNecessiteRappel: !Ref PromptNecessiteRappel
-          PromptIdentificationSujet: !Ref PromptIdentificationSujet
-          PromptIdentificationProduit: !Ref PromptIdentificationProduit
-          PromptEvaluationPolitesse: !Ref PromptEvaluationPolitesse
-          PromptEvaluationQualite: !Ref PromptEvaluationQualite
-          PromptActionAgent: !Ref PromptActionAgent
-          PromptBilanGlobal: !Ref PromptBilanGlobal
+          #PromptResumeGeneral: !Ref PromptResumeGeneral
+          #PromptStatutResolution: !Ref PromptStatutResolution
+          #PromptResultatsConversation: !Ref PromptResultatsConversation
+          #PromptProblemeClient: !Ref PromptProblemeClient
+          #PromptNecessiteRappel: !Ref PromptNecessiteRappel
+          #PromptIdentificationSujet: !Ref PromptIdentificationSujet
+          #PromptIdentificationProduit: !Ref PromptIdentificationProduit
+          #PromptEvaluationPolitesse: !Ref PromptEvaluationPolitesse
+          #PromptEvaluationQualite: !Ref PromptEvaluationQualite
+          #PromptActionAgent: !Ref PromptActionAgent
+          #PromptBilanGlobal: !Ref PromptBilanGlobal
       Tags:
       - Key: Project
         Value: !Ref Project
@@ -618,7 +558,7 @@ Resources:
       Timeout: 240
       Role: !GetAtt BedrockEvaluateFunctionRole.Arn
       Code:
-        S3Bucket: "quality-pro-cfn-templates"
+        S3Bucket: !Ref BucketForLambdaArtefact
         S3Key: lambdas/bedrock_evaluate_post_call_survey.zip
       Environment:
         Variables:
@@ -651,7 +591,7 @@ Resources:
       Timeout: 60
       Role: !GetAtt StoreResponseFunctionRole.Arn
       Code:
-        S3Bucket: "quality-pro-cfn-templates"
+        S3Bucket: !Ref BucketForLambdaArtefact
         S3Key: lambdas/store_response.zip
       Environment:
         Variables:
@@ -960,7 +900,7 @@ Resources:
       Timeout: 60
       Role: !GetAtt WaitForTranscribeFunctionRole.Arn
       Code:
-        S3Bucket: "quality-pro-cfn-templates"
+        S3Bucket: !Ref BucketForLambdaArtefact
         S3Key: lambdas/wait_for_transcribe.zip
       Environment:
         Variables:

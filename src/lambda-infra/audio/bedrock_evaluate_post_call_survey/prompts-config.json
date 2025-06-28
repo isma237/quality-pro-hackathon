@@ -1,0 +1,97 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "description": "Configuration des prompts pour l'analyse de qualité des appels",
+    "last_updated": "2025-06-28"
+  },
+  "prompts": {
+    "base": {
+      "bedrock_prompt": "Analyse la conversation suivante selon les consignes strictes ci-dessous:"
+    },
+    "conversation_analysis": {
+      "resume_general": "Briefly summarize this phone conversation in 3-5 natural sentences. Mention the reason for the call, the agent's actions, and the outcome for the customer, without using generic phrases like \"After analysis...\" or \"As an expert...\".",
+      "statut_resolution": "Analyze this call transcript and indicate simply with \"Oui\" or \"Non\" if the customer's issue was resolved by the end of the conversation. The response should be in french",
+      "resultats_conversation": "Identify the concrete solutions offered to the customer in this transcript. Directly quote the passages where the agent explains these solutions, preserving the original language.",
+      "probleme_client": "Identify the precise moment when the customer explains their problem or formulates their request. Quote their own words without rephrasing.",
+      "necessite_rappel": "Is a customer callback necessary or was it promised by the agent? Answer only with \"Oui\" or \"Non\" or.",
+      "action_agent": "List the concrete actions taken by the agent during this call in list of points. Start each point with an action verb without generic introductory phrasing."
+    },
+    "categorization": {
+      "identification_sujet_template": "Analyze the call transcript and identify the main topic using 1-2 keywords from the categories below.\n\nKeywords by Category:\n{categories_list}\n\nExamples:\n{examples}\n\nOutput Format:\nReturn only the 1-2 most relevant keywords, comma-separated if using two and only in french.",
+      "identification_produit_template": "Extract the specific product or service mentioned by the customer from the call transcript.\n\nProduct Categories:\n{product_categories_list}\n\nExamples:\n{product_examples}\n\nOutput Format:\nReturn the exact product/service name mentioned, including specifications (GB, duration, etc.) when provided.",
+      "identification_sujet": "Analyze the call transcript and identify the main topic using 1-2 keywords from the categories below.\nKeywords by Category\nService Issues: billing, payment, network-outage, signal-weak, data-usage, mobile-money, airtime-transfer, service-suspension\nTechnical Support: connectivity, troubleshooting, ussd-codes, sms-issues, call-drops, network-registration\nAccount Management: sim-registration, sim-replacement, number-portability, tariff-change, account-balance, kyc-update\nProducts: data-bundles, voice-bundles, international-calling, momo-services, internet-packages, promotional-offers\nMobile Money: momo-transfer, momo-withdrawal, transaction-failed, momo-fees, agent-issues\nDevice/SIM: sim-blocking, sim-swap, device-unlock, phone-financing\nExamples\n* \"Ma carte SIM est bloquée\" → sim-blocking\n* \"Je veux acheter un forfait de 5GB\" → data-bundles\n* \"Ma transaction / Mon transfert Orange Money a échoué\" → transaction-failed\n* \"Mon réseau ne capte pas\" → signal-weak\n* \"Comment transférer du crédit?\" → airtime-transfer\nOutput Format\nReturn only the 1-2 most relevant keywords, comma-separated if using two and only in french.",
+      "identification_produit": "Extract the specific product or service mentioned by the customer from the call transcript.\nProduct Categories\nData Products: forfait internet, bundle data, forfait illimité, internet mobile, wifi pocket, clé internet\nVoice Products: forfait voix, minutes gratuites, appels illimités, forfait international, roaming\nMobile Money: Orange Money, MTN MoMo, transfert d'argent, retrait espèces, dépôt argent, paiement factures\nBundles/Packages: forfait mensuel, forfait hebdomadaire, forfait journalier, pack étudiant, forfait famille\nValue-Added Services: SMS illimités, sonneries, jeux, horoscope, info trafic, météo\nDevices: smartphone, téléphone portable, modem, routeur, accessoires\nExamples\n* \"Je veux le forfait internet de 10GB\" → forfait internet 10GB\n* \"Mon Orange Money ne marche pas\" → Orange Money\n* \"J'ai besoin d'un forfait voix pour les appels\" → forfait voix\n* \"Le pack étudiant m'intéresse\" → pack étudiant\n* \"Mon modem 4G a un problème\" → Modem 4G\nOutput Format\nReturn the exact product/service name mentioned, including specifications (GB, duration, etc.) when provided."
+    },
+    "quality_evaluation": {
+      "evaluation_politesse": "Did the agent maintain an appropriate level of politeness and professionalism throughout the conversation? Answer only with \"yes\" or \"no\". The response should be in french",
+      "evaluation_qualite": "Identify any actions that remain to be done after this call, either by the customer or by the company. If no actions are pending, indicate \"No pending actions\".",
+      "bilan_global": "Below is a transcript of a call between a customer service agent and a customer. Your role is to evaluate the agent's performance from a customer experience (CX) quality management perspective. Provide your response ONLY in JSON format with the following fields. The campaign objectives are: reducing call duration, empowering the customer, and guiding them to the fastest solution. json { \"resume_probleme\": \"\", \"resume_solution\": \"\", \"clarte_concision\": { \"valeur\": true/false, \"explication\": \"\" }, \"canaux_alternatifs_proposes\": [\"\", \"\"], \"repetitions_detectees\": { \"valeur\": true/false, \"exemples\": [\"\", \"\"] }, \"appel_trop_long\": { \"valeur\": [true si la durée réelle dépasse la durée optimale estimée, false sinon], \"duree_estimee_optimale_minutes\": [votre estimation de la durée optimale pour ce type d'appel, basée sur le contenu] }, \"issue_claire_pour_client\": true/false, \"suggestions_amelioration\": [ \"\", \"\", \"\" ], \"score_global_sur_10\": [score] } Analyze the transcript thoroughly before providing your assessment. Focus on: How clearly the agent communicated Whether they offered self-service alternatives If they repeated information unnecessarily If the call could have been shorter Whether the outcome was clear to the customer Specific, actionable improvement suggestions Remember the key objectives: shorter calls, customer empowerment, and fastest resolution path."
+    },
+    "post_call_survey": {
+      "satisfaction_score": "Analyze the customer response and provide ONLY a number 1-5 (1=Very dissatisfied, 5=Very satisfied). No explanation, no justification. Examples: 'Très satisfait'=5, 'Pas content du tout'=1, 'Ça va'=3.",
+      "time_adequacy_score": "Analyze the customer response about service timing and provide ONLY a number 1-5 (1=Too slow, 5=Very fast). No explanation, no justification. Examples: 'Trop lent'=1, 'Très rapide'=5, 'Normal'=3, 'Acceptable'=4.",
+      "assistance_adequacy_score": "Analyze how well the assistance matched customer needs and provide ONLY a number 1-5 (1=Not helpful, 5=Perfect help). No explanation, no justification. Examples: 'Parfait'=5, 'Pas aidé'=1, 'Moyennement'=3.",
+      "easy_of_resolution_score": "Analyze how easy it was to resolve the issue and provide ONLY a number 1-5 (1=Very difficult, 5=Very easy). No explanation, no justification. Examples: 'Très facile'=5, 'Compliqué'=2, 'Pas difficile'=4.",
+      "net_promoter_score": "Analyze likelihood to recommend and provide ONLY a number 0-10. No explanation, no justification. Examples: 'Jamais'=0, 'Certainement'=10, 'Peut-être'=5-6, 'Probablement'=7-8.",
+      "satisfaction_verbatim": "Extract the exact customer quote explaining their satisfaction. Return the most relevant phrase in quotes.",
+      "dissatisfaction_verbatim": "Extract the exact customer quote explaining their dissatisfaction. Return the most relevant phrase in quotes.",
+      "resolution_status": "Analyze if the issue was resolved and return exactly one: 'Resolved', 'Partially resolved', or 'Not resolved'. Examples: 'Problème réglé'=Resolved, 'Pas encore fini'=Partially resolved, 'Rien n'a changé'=Not resolved.",
+      "main_improvement_suggestion": "Extract the exact customer quote about service improvements. Return the most relevant suggestion in quotes."
+    },
+    "advanced_analysis": {
+      "conversation_analysis": "Act as an expert in customer experience quality analysis and call analytics. Analyze the following call transcript between an agent and a customer. Focus on identifying critical signals and Return ONLY this JSON with ALL VALUES in French: { \"risk_assessment\": { \"churn_risk_level\": \"Faible/Moyen/Eleve\", \"churn_probability\": 0-100, \"churn_signals\": [\"signal1\", \"signal2\"], \"urgent_callback_required\": true/false, \"callback_reason\": \"raison si true\" }, \"conversation_metrics\": { \"agent_talk_ratio\": 0-100, \"interruption_count\": 0-20, \"emotional_progression\": [\"emotion1\", \"emotion2\", \"emotion3\"], \"peak_emotion\": \"emotion principale\", \"peak_emotion_trigger\": \"declencheur\", \"dominant_sentiment\": \"Positif/Neutre/Negatif\" }, \"verbatims\": { \"critical_statement\": \"citation du probleme principal\", \"positive_highlight\": \"citation positive si presente\", \"improvement_request\": \"citation d amelioration si presente\", \"churn_threat\": \"citation de menace de depart si presente\" } } Use numbers for numeric values, true/false without quotes, 1-3 items per array, concise French text."
+    }
+  },
+  "examples": {
+    "subject_classification": [
+      "\"Mon forfait Flexi ne marche plus\" → Problème Forfait",
+      "\"Je veux souscrire au #131*6#\" → Activation Service",
+      "\"Mon Orange Bonus expire demain\" → Renouvellement Forfait",
+      "\"L'internet Home Infinity est lent\" → Problème Connexion",
+      "\"Mon compte Orange Money est bloqué\" → Compte Bloqué",
+      "\"Je n'arrive pas à faire #150#\" → Code USSD",
+      "\"Ma transaction Orange Money a échoué\" → Transaction Échouée",
+      "\"L'agent Orange Money refuse mon retrait\" → Problème Agent",
+      "\"Mon forfait internet 24h est fini\" → Consommation Data",
+      "\"Je veux activer OrangeWorld\" → Activation Service",
+      "\"Mes appels Orange-Orange se coupent\" → Appels Coupés",
+      "\"Comment payer avec Orange Money?\" → Information Service",
+      "\"Ma ligne Orange Perso ne capte pas\" → Signal Faible",
+      "\"Le service client 8900 ne répond pas\" → Contact Support",
+      "\"Mon forfait mensuel s'est arrêté\" → Expiration Forfait"
+    ],
+    "product_identification": [
+      "\"Je veux le forfait Flexi personnalisé\" → Forfait Flexi",
+      "\"Mon Orange Bonus journalier\" → Orange Bonus Journalier", 
+      "\"Le forfait internet classique 3 jours\" → Forfait Internet 3 Jours",
+      "\"Home Infinity pour toute la famille\" → Home Infinity",
+      "\"Mon compte Orange Money\" → Orange Money",
+      "\"Le service OrangeWorld WAP\" → OrangeWorld",
+      "\"L'application Orange Money Africa\" → App Orange Money",
+      "\"Mon forfait Orange Perso\" → Orange Perso",
+      "\"Le forfait internet mobile mois\" → Forfait Internet Mensuel",
+      "\"Orange Bonus hebdomadaire au #131*8#\" → Orange Bonus Hebdomadaire",
+      "\"Le simulateur de frais Orange Money\" → Simulateur Orange Money",
+      "\"Ma ligne prépayée Orange\" → Ligne Prépayée",
+      "\"Le forfait internet 24h\" → Forfait Internet 24h",
+      "\"Transfert Orange Money CEMAC\" → Transfert International",
+      "\"Mon abonnement Orange illimité\" → Forfait Illimité"
+    ]
+  },
+  "categories": {
+    "problemes_service": ["facturation", "paiement", "panne-reseau", "signal-faible", "consommation-data", "mobile-money", "transfert-credit", "suspension-service", "maxit", "maxit-om"],
+    "support_technique": ["connectivite", "depannage", "codes-ussd", "problemes-sms", "appels-coupes", "enregistrement-reseau"],
+    "gestion_compte": ["enregistrement-sim", "remplacement-sim", "portabilite-numero", "changement-tarif", "solde-compte", "mise-a-jour-kyc"],
+    "produits": ["forfaits-data", "forfaits-voix", "appels-internationaux", "services-momo", "forfaits-internet", "offres-promotionnelles"],
+    "mobile_money": ["transfert-om", "retrait-om", "transaction-echouee", "frais-om", "problemes-agent", "Orange Money"],
+    "appareil_sim": ["blocage-sim", "echange-sim", "deverrouillage-appareil", "financement-telephone"]
+  },
+  "product_categories": {
+    "data_products": ["forfait internet", "bundle data", "forfait illimité", "internet mobile", "wifi pocket", "clé internet"],
+    "voice_products": ["forfait voix", "minutes gratuites", "appels illimités", "forfait international", "roaming"],
+    "mobile_money": ["Orange Money", "MTN MoMo", "transfert d'argent", "retrait espèces", "dépôt argent", "paiement factures"],
+    "bundles_packages": ["forfait mensuel", "forfait hebdomadaire", "forfait journalier", "pack étudiant", "forfait famille"],
+    "value_added_services": ["SMS illimités", "sonneries", "jeux", "horoscope", "info trafic", "météo"],
+    "devices": ["smartphone", "téléphone portable", "modem", "routeur", "accessoires"]
+  }
+}
