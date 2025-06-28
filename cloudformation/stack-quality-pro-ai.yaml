@@ -1,0 +1,1031 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Quality Pro - Gestion des API sur AWS Lambda
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    Description: The env for service
+  Project:
+    Type: String
+    Default: quality-pro
+    Description: Project name
+  AudioBucketName:
+    Type: String
+    Default: quality-pro-audio-${Environment}
+    Description: Name of the S3 bucket to store audio files
+  StateMachineName:
+    Type: String
+    Default: file-processing-statemachine-${Environment}
+    Description: Name of the Step Function state machine
+  Owner:
+    Type: String
+    Default: quality-team
+    Description: Team responsible for the resource
+  TABLENAME:
+    Type: String
+    Default: Campaigns
+    Description: Table name for the project
+  BedrockPrompt:
+    Type: String
+    Default: >
+      Analyse la conversation suivante selon les consignes strictes ci-dessous:
+    Description: Prompt template pour Bedrock
+  PromptStatutResolution:
+    Type: String
+    Default: >
+      Analyze this call transcript and indicate simply with "Oui" or "Non" if the customer's issue was resolved by the end of the conversation. The response should be in french
+  PromptResumeGeneral:
+    Type: String
+    Default: >
+      Briefly summarize this phone conversation in 3-5 natural sentences. Mention the reason for the call, the agent's actions, and the outcome for the customer, without using generic phrases like "After analysis..." or "As an expert...".
+  PromptResultatsConversation:
+    Type: String
+    Default: >
+      Identify the concrete solutions offered to the customer in this transcript. Directly quote the passages where the agent explains these solutions, preserving the original language.
+  PromptProblemeClient:
+    Type: String
+    Default: >
+      Identify the precise moment when the customer explains their problem or formulates their request. Quote their own words without rephrasing.
+  PromptNecessiteRappel:
+    Type: String
+    Default: >
+      Is a customer callback necessary or was it promised by the agent? Answer only with "Oui" or "Non" or.
+  PromptIdentificationSujet:
+    Type: String
+    Default: >
+      Analyze the call transcript and identify the main topic using 1-2 keywords from the categories below.
+      Keywords by Category
+      Service Issues: billing, payment, network-outage, signal-weak, data-usage, mobile-money, airtime-transfer, service-suspension
+      Technical Support: connectivity, troubleshooting, ussd-codes, sms-issues, call-drops, network-registration
+      Account Management: sim-registration, sim-replacement, number-portability, tariff-change, account-balance, kyc-update
+      Products: data-bundles, voice-bundles, international-calling, momo-services, internet-packages, promotional-offers
+      Mobile Money: momo-transfer, momo-withdrawal, transaction-failed, momo-fees, agent-issues
+      Device/SIM: sim-blocking, sim-swap, device-unlock, phone-financing
+      Examples
+      * "Ma carte SIM est bloquée" → sim-blocking
+      * "Je veux acheter un forfait de 5GB" → data-bundles
+      * "Ma transaction / Mon transfert Orange Money a échoué" → transaction-failed
+      * "Mon réseau ne capte pas" → signal-weak
+      * "Comment transférer du crédit?" → airtime-transfer
+      Output Format
+      Return only the 1-2 most relevant keywords, comma-separated if using two and only in french.
+
+  PromptIdentificationProduit:
+    Type: String
+    Default: >
+      Extract the specific product or service mentioned by the customer from the call transcript.
+      Product Categories
+      Data Products: forfait internet, bundle data, forfait illimité, internet mobile, wifi pocket, clé internet
+      Voice Products: forfait voix, minutes gratuites, appels illimités, forfait international, roaming
+      Mobile Money: Orange Money, MTN MoMo, transfert d'argent, retrait espèces, dépôt argent, paiement factures
+      Bundles/Packages: forfait mensuel, forfait hebdomadaire, forfait journalier, pack étudiant, forfait famille
+      Value-Added Services: SMS illimités, sonneries, jeux, horoscope, info trafic, météo
+      Devices: smartphone, téléphone portable, modem, routeur, accessoires
+      Examples
+      * "Je veux le forfait internet de 10GB" → forfait internet 10GB
+      * "Mon Orange Money ne marche pas" → Orange Money
+      * "J'ai besoin d'un forfait voix pour les appels" → forfait voix
+      * "Le pack étudiant m'intéresse" → pack étudiant
+      * "Mon modem 4G a un problème" → Modem 4G
+      Output Format
+      Return the exact product/service name mentioned, including specifications (GB, duration, etc.) when provided.
+  PromptEvaluationPolitesse:
+    Type: String
+    Default: >
+      Did the agent maintain an appropriate level of politeness and professionalism throughout the conversation? Answer only with "yes" or "no". The response should be in french
+  PromptEvaluationQualite:
+    Type: String
+    Default: >
+      Identify any actions that remain to be done after this call, either by the customer or by the company. If no actions are pending, indicate "No pending actions".
+  PromptActionAgent:
+    Type: String
+    Default: >
+      List the concrete actions taken by the agent during this call in list of points. Start each point with an action verb without generic introductory phrasing.
+
+  PromptBilanGlobal:
+    Type: String
+    Default: >
+      Below is a transcript of a call between a customer service agent and a customer. Your role is to evaluate the agent's performance from a customer experience (CX) quality management perspective. Provide your response ONLY in JSON format with the following fields. The campaign objectives are: reducing call duration, empowering the customer, and guiding them to the fastest solution. json { "resume_probleme": "", "resume_solution": "", "clarte_concision": { "valeur": true/false, "explication": "" }, "canaux_alternatifs_proposes": ["", ""], "repetitions_detectees": { "valeur": true/false, "exemples": ["", ""] }, "appel_trop_long": { "valeur": [true si la durée réelle dépasse la durée optimale estimée, false sinon], "duree_estimee_optimale_minutes": [votre estimation de la durée optimale pour ce type d'appel, basée sur le contenu] }, "issue_claire_pour_client": true/false, "suggestions_amelioration": [ "", "", "" ], "score_global_sur_10": [score] } Analyze the transcript thoroughly before providing your assessment. Focus on: How clearly the agent communicated Whether they offered self-service alternatives If they repeated information unnecessarily If the call could have been shorter Whether the outcome was clear to the customer Specific, actionable improvement suggestions Remember the key objectives: shorter calls, customer empowerment, and fastest resolution path.
+  
+  SatisfactionScorePrompt:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this question: "Overall, how satisfied are you with the quality of service provided by our call center?"
+      Customer response: [INSERT RESPONSE]
+      Provide only a single number from 1-5 representing the satisfaction score (1=Very dissatisfied, 5=Very satisfied).
+
+  TimeAdequacyScorePrompt:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this statement: "My request was handled within a reasonable timeframe."
+      Provide only a single number from 1-5 representing agreement with the statement (1=Strongly disagree, 5=Strongly agree).
+
+  AssistanceAdequacyScorePrompt:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this statement: "The assistance I received was perfectly suited to my needs."
+      Provide only a single number from 1-5 representing the adequacy score (1=Not at all adequate, 5=Perfectly adequate).
+
+  EasyOfResolutionScorePrompt:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this question: "How easy was it to get a resolution to your request?"
+      Provide only a single number from 1-5 representing the ease score (1=Very difficult, 5=Very easy).
+
+  NetPromoterScorePrompt:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this question: "How likely are you to recommend our service to a friend or colleague?"
+      Provide only a single number from 0-10 representing the likelihood to recommend.
+
+
+  SatisfactionVerbatimPrompt:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this question: "What is the reason for your satisfaction?"
+      Provide only a single direct quote (verbatim) that best captures the main reason for satisfaction.
+  
+  DissatisfactionVerbatimPrompt:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this question: "What is the reason for your dissatisfaction?"
+      Provide only a single direct quote (verbatim) that best captures the main reason for dissatisfaction.
+
+  ResolutionPromptStatus:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this question: "Has your request been definitively resolved to date?"
+      Provide only one of these three statuses: "Resolved", "Partially resolved", or "Not resolved".
+
+  MainImprovementSuggestionPrompt:
+    Type: String
+    Default: >
+      Analyze only the following customer response to this question: "What could we improve in our service?"
+      Provide only a single direct quote (verbatim) that best captures the main improvement suggestion.
+
+  ConversationAnalysisPrompt:
+    Type: String
+    Default: >
+      Act as an expert in customer experience quality analysis and call analytics. Analyze the following call transcript between an agent and a customer. Focus on identifying critical signals and Return ONLY this JSON with ALL VALUES in French: { "risk_assessment": { "churn_risk_level": "Faible/Moyen/Eleve", "churn_probability": 0-100, "churn_signals": ["signal1", "signal2"], "urgent_callback_required": true/false, "callback_reason": "raison si true" }, "conversation_metrics": { "agent_talk_ratio": 0-100, "interruption_count": 0-20, "emotional_progression": ["emotion1", "emotion2", "emotion3"], "peak_emotion": "emotion principale", "peak_emotion_trigger": "declencheur", "dominant_sentiment": "Positif/Neutre/Negatif" }, "verbatims": { "critical_statement": "citation du probleme principal", "positive_highlight": "citation positive si presente", "improvement_request": "citation d amelioration si presente", "churn_threat": "citation de menace de depart si presente" } } Use numbers for numeric values, true/false without quotes, 1-3 items per array, concise French text.
+
+
+Resources:
+
+  # Audio Bucket
+  AudioBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref AudioBucketName
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 90
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - PUT
+              - POST
+              - GET
+              - HEAD
+            AllowedOrigins:
+              - "*"
+            ExposedHeaders:
+              - ETag
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Queue: !GetAtt FileProcessingQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: "suffix"
+                    Value: ".mp3"
+          - Event: "s3:ObjectCreated:*"
+            Queue: !GetAtt FileProcessingQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: "suffix"
+                    Value: ".wav"
+          - Event: "s3:ObjectCreated:*"
+            Queue: !GetAtt FileProcessingQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: "suffix"
+                    Value: ".m4a"
+          - Event: "s3:ObjectCreated:*"
+            Queue: !GetAtt FileProcessingQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: "suffix"
+                    Value: ".flac"
+          - Event: "s3:ObjectCreated:*"
+            Queue: !GetAtt FileProcessingQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: "suffix"
+                    Value: ".ogg"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  # File Processing Queue
+  FileProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${Project}-file-processing-queue-${Environment}-${AWS::AccountId}'
+      VisibilityTimeout: 100
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FileProcessingDLQ.Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  FileProcessingQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref FileProcessingQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt FileProcessingQueue.Arn
+
+  AudioFileUploadQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref FileProcessingQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AllowS3ToSendMessages"
+            Effect: Allow
+            Principal:
+              Service: "s3.amazonaws.com"
+            Action: "sqs:SendMessage"
+            Resource: !GetAtt FileProcessingQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !GetAtt AudioBucket.Arn
+
+  FileProcessingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${Project}-file-processing-dlq-${Environment}
+      VisibilityTimeout: 300
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  FileProcessingFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub file-processing-${Environment}
+      Description: File Processing Lambda
+      Handler: index.handler
+      Runtime: nodejs18.x
+      MemorySize: 1024
+      Timeout: 300
+      Role: !GetAtt FileProcessingFunctionRole.Arn
+      Code:
+        S3Bucket: "quality-pro-cfn-templates"
+        S3Key: lambdas/transcript.zip
+      DeadLetterConfig:
+        TargetArn: !GetAtt FileProcessingDLQ.Arn
+      Environment:
+        Variables:
+          QUEUE_URL: !Ref FileProcessingQueue
+          DLQ_URL: !Ref FileProcessingDLQ
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  FileProcessingFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole
+        - arn:aws:iam::aws:policy/AmazonTranscribeFullAccess
+
+  FileProcessingLambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub file-processing-policy-${Environment}
+      Roles:
+        - !Ref FileProcessingFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+            Resource:
+              - !GetAtt FileProcessingQueue.Arn
+              - !GetAtt FileProcessingDLQ.Arn
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+            Resource: '*'
+
+  GetTranscriptFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub get-transcript-${Environment}
+      Description: Récupère le texte du transcript depuis S3 pour analyse
+      Handler: index.handler
+      Runtime: nodejs18.x
+      MemorySize: 512
+      Timeout: 60
+      Role: !GetAtt GetTranscriptFunctionRole.Arn
+      Code:
+        S3Bucket: "quality-pro-cfn-templates"
+        S3Key: lambdas/get_transcript.zip
+      Environment:
+        Variables:
+          ENV: !Ref Environment
+          TABLE_NAME: !Ref TABLENAME
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  GetTranscriptFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  GetTranscriptLambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub get-transcript-policy-${Environment}
+      Roles:
+        - !Ref GetTranscriptFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+              - dynamodb:PutItem
+            Resource: 
+              - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TABLENAME}
+
+  ComprehendFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub comprehend-${Environment}
+      Description: Analyse le texte avec Amazon Comprehend
+      Handler: index.handler
+      Runtime: nodejs18.x
+      MemorySize: 512
+      Timeout: 60
+      Role: !GetAtt ComprehendFunctionRole.Arn
+      Code:
+        S3Bucket: "quality-pro-cfn-templates"
+        S3Key: lambdas/comprehend.zip
+      Environment:
+        Variables:
+          ENV: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  ComprehendFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/ComprehendFullAccess
+
+  StepFunctionTriggerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub stepfunction-trigger-${Environment}
+      Description: Déclenche la Step Function à partir d'un message SQS
+      Handler: index.handler
+      Runtime: nodejs18.x
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt StepFunctionTriggerFunctionRole.Arn
+      Code:
+        S3Bucket: "quality-pro-cfn-templates"
+        S3Key: lambdas/stepfunction_trigger.zip
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref StepFunctionStateMachine
+          ENV: !Ref Environment
+          TABLE_NAME: !Ref TABLENAME
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  StepFunctionTriggerFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  StepFunctionTriggerLambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub stepfunction-trigger-policy-${Environment}
+      Roles:
+        - !Ref StepFunctionTriggerFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - states:StartExecution
+            Resource:
+              - !Ref StepFunctionStateMachine
+          - Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+            Resource: !GetAtt FileProcessingQueue.Arn
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+              - dynamodb:PutItem
+            Resource: 
+              - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TABLENAME}
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource: 
+              - !Sub arn:aws:s3:::${AudioBucket}/*
+              - !Sub arn:aws:s3:::${AudioBucket}
+
+  StepFunctionTriggerSQSEventSource:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 5
+      Enabled: true
+      EventSourceArn: !GetAtt FileProcessingQueue.Arn
+      FunctionName: !Ref StepFunctionTriggerFunction
+      MaximumBatchingWindowInSeconds: 30
+  
+  BedrockEvaluateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub bedrock-evaluate-${Environment}
+      Description: Analyse finale via Bedrock
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      MemorySize: 1024
+      Timeout: 240
+      Role: !GetAtt BedrockEvaluateFunctionRole.Arn
+      Code:
+        S3Bucket: "quality-pro-cfn-templates"
+        S3Key: lambdas/bedrock_evaluate.zip
+      Environment:
+        Variables:
+          ENV: !Ref Environment
+          BEDROCK_PROMPT: !Ref BedrockPrompt
+          PromptResumeGeneral: !Ref PromptResumeGeneral
+          PromptStatutResolution: !Ref PromptStatutResolution
+          PromptResultatsConversation: !Ref PromptResultatsConversation
+          PromptProblemeClient: !Ref PromptProblemeClient
+          PromptNecessiteRappel: !Ref PromptNecessiteRappel
+          PromptIdentificationSujet: !Ref PromptIdentificationSujet
+          PromptIdentificationProduit: !Ref PromptIdentificationProduit
+          PromptEvaluationPolitesse: !Ref PromptEvaluationPolitesse
+          PromptEvaluationQualite: !Ref PromptEvaluationQualite
+          PromptActionAgent: !Ref PromptActionAgent
+          PromptBilanGlobal: !Ref PromptBilanGlobal
+      Tags:
+      - Key: Project
+        Value: !Ref Project
+      - Key: Owner
+        Value: !Ref Owner
+
+  BedrockEvaluateFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub bedrock-evaluate-bedrock-policy-${Environment}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: "arn:aws:bedrock:*:*:*"
+
+  BedrockEvaluatePostCallSurveyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub bedrock-evaluate-post-call-survey-${Environment}
+      Description: Analyse finale via Bedrock pour Post Call Survey
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      MemorySize: 1024
+      Timeout: 240
+      Role: !GetAtt BedrockEvaluateFunctionRole.Arn
+      Code:
+        S3Bucket: "quality-pro-cfn-templates"
+        S3Key: lambdas/bedrock_evaluate_post_call_survey.zip
+      Environment:
+        Variables:
+          ENV: !Ref Environment
+          SATISFACTION_SCORE_PROMPT: !Ref SatisfactionScorePrompt
+          TIME_ADEQUACY_SCORE_PROMPT: !Ref TimeAdequacyScorePrompt
+          ASSISTANCE_ADEQUACY_SCORE_PROMPT: !Ref AssistanceAdequacyScorePrompt
+          EASY_OF_RESOLUTION_SCORE_PROMPT: !Ref EasyOfResolutionScorePrompt
+          NET_PROMOTER_SCORE_PROMPT: !Ref NetPromoterScorePrompt
+          SATISFACTION_VERBATIM_PROMPT: !Ref SatisfactionVerbatimPrompt
+          DISSATISFACTION_VERBATIM_PROMPT: !Ref DissatisfactionVerbatimPrompt
+          RESOLUTION_PROMPT_STATUS: !Ref ResolutionPromptStatus
+          MAIN_IMPROVEMENT_SUGGESTION_PROMPT: !Ref MainImprovementSuggestionPrompt
+          CONVERSATION_ANALYSIS_PROMPT: !Ref ConversationAnalysisPrompt
+          TABLE_NAME: !Ref TABLENAME          
+      Tags:
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+  
+  StoreResponseFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub store-response-${Environment}
+      Description: Stores the BedrockEvaluate response in DynamoDB
+      Handler: index.handler
+      Runtime: nodejs18.x
+      MemorySize: 256
+      Timeout: 60
+      Role: !GetAtt StoreResponseFunctionRole.Arn
+      Code:
+        S3Bucket: "quality-pro-cfn-templates"
+        S3Key: lambdas/store_response.zip
+      Environment:
+        Variables:
+          ENV: !Ref Environment
+          TABLE_NAME: !Ref TABLENAME
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  StoreResponseFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub store-response-dynamodb-policy-${Environment}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: 
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TABLENAME} 
+
+  StepFunctionStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub stepfunction-statemachine-role-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub stepfunction-lambda-invoke-policy-${Environment}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - bedrock:InvokeModel
+                Resource:
+                  - !GetAtt FileProcessingFunction.Arn
+                  - !GetAtt GetTranscriptFunction.Arn
+                  - !GetAtt WaitForTranscribeFunction.Arn
+                  - !GetAtt ComprehendFunction.Arn
+                  - !GetAtt BedrockEvaluateFunction.Arn
+                  - !GetAtt StoreResponseFunction.Arn
+                  - !GetAtt BedrockEvaluatePostCallSurveyFunction.Arn
+                
+  StepFunctionStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Ref StateMachineName
+      RoleArn: !GetAtt StepFunctionStateMachineRole.Arn
+      DefinitionString:
+        Fn::Sub: |
+          {
+            "StartAt": "FileProcessing",
+            "States": {
+              "FileProcessing": {
+                "Type": "Task",
+                "Resource": "${FileProcessingFunction.Arn}",
+                "Next": "WaitForTranscribeWait"
+              },
+              "WaitForTranscribeWait": {
+                "Type": "Wait",
+                "Seconds": 30,
+                "Next": "WaitForTranscribe"
+              },
+              "WaitForTranscribe": {
+                "Type": "Task",
+                "Resource": "${WaitForTranscribeFunction.Arn}",
+                "Next": "CheckTranscribeStatus"
+              },
+              "CheckTranscribeStatus": {
+                "Type": "Choice",
+                "Choices": [
+                  {
+                    "Variable": "$.status",
+                    "StringEquals": "COMPLETED",
+                    "Next": "GetTranscript"
+                  },
+                  {
+                    "Variable": "$.status",
+                    "StringEquals": "FAILED",
+                    "Next": "FailedState"
+                  }
+                ],
+                "Default": "WaitForTranscribeWait"
+              },
+              "GetTranscript": {
+                "Type": "Task",
+                "Resource": "${GetTranscriptFunction.Arn}",
+                "Next": "CheckIfIgnored"
+              },
+              "CheckIfIgnored": {
+                "Type": "Choice",
+                "Choices": [
+                  {
+                    "Variable": "$.ignored",
+                    "BooleanEquals": true,
+                    "Next": "IgnoredState"
+                  }
+                ],
+                "Default": "BeforeComprehend"
+              },
+              "IgnoredState": {
+                "Type": "Succeed"
+              },
+              "BeforeComprehend": {
+                "Type": "Pass",
+                "Parameters": {
+                  "timestamp.$": "$$.State.EnteredTime",
+                  "stage": "Starting Comprehend Analysis",
+                  "executionId.$": "$$.Execution.Id",
+                  "context.$": "$"
+                },
+                "ResultPath": "$.monitoring.comprehend.start",
+                "Next": "ComprehendAnalysis"
+              },
+              "ComprehendAnalysis": {
+                "Type": "Task",
+                "Resource": "${ComprehendFunction.Arn}",
+                "Next": "AfterComprehend",
+                "Catch": [
+                  {
+                    "ErrorEquals": ["States.ALL"],
+                    "ResultPath": "$.ComprehendError",
+                    "Next": "StoreResponse"
+                  }
+                ]
+              },
+              "AfterComprehend": {
+                "Type": "Pass",
+                "Parameters": {
+                  "timestamp.$": "$$.State.EnteredTime",
+                  "stage": "Completed Comprehend Analysis",
+                      "duration": {
+                        "States.TimestampDiff": ["$.monitoring.comprehend.start.timestamp", "$$.State.EnteredTime", "Seconds"]
+                    }
+                },
+                "ResultPath": "$.monitoring.comprehend.end",
+                "Next": "BeforeChoicePoint"
+              },
+              "BeforeChoicePoint": {
+                "Type": "Pass",
+                "Parameters": {
+                  "timestamp.$": "$$.State.EnteredTime",
+                  "stage": "Decision Point Evaluation",
+                  "parameters": {
+                    "campaignType.$": "$.campaign_type",
+                    "hasTranscript": {
+                      "States.IsPresent": ["$.transcript"]
+                    },
+                    "ignored": {
+                      "States.IsPresent": ["$.ignored"]
+                    }
+                  }
+                },
+                "ResultPath": "$.monitoring.decision",
+                "Next": "CheckTypeOfCampaign"
+              },
+              "CheckTypeOfCampaign": {
+                "Type": "Choice",
+                "Choices": [
+                  {
+                    "Variable": "$.campaign_type",
+                    "StringEquals": "Post Call Survey",
+                    "Next": "BeforeEvaluatePostCallSurvey"
+                  },
+                  {
+                    "Variable": "$.campaign_type",
+                    "StringEquals": "Analyse des Appels Entrants",
+                    "Next": "BeforeEvaluateCallMining"
+                  }
+                ],
+                "Default": "BeforeEvaluateCallMining"
+              },
+              "BedrockEvaluatePostCallSurvey": {
+                "Type": "Task",
+                "Resource": "${BedrockEvaluatePostCallSurveyFunction.Arn}",
+                "Next": "BeforeStoreResponse",
+                "Retry": [
+                  {
+                    "ErrorEquals": ["States.Timeout", "Lambda.ServiceException"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                  }
+                ],
+                "Catch": [
+                  {
+                    "ErrorEquals": ["States.ALL"],
+                    "ResultPath": "$.EvaluatePostCallError",
+                    "Next": "StoreResponse"
+                  }
+                ]
+              },
+              "BeforeEvaluateCallMining": {
+                "Type": "Pass",
+                "Parameters": {
+                  "timestamp.$": "$$.State.EnteredTime",
+                  "stage": "Starting Bedrock Call Mining Analysis",
+                  "executionId.$": "$$.Execution.Id"
+                },
+                "ResultPath": "$.monitoring.bedrock.callMining.start",
+                "Next": "BedrockEvaluateCallMining"
+              },
+              "BedrockEvaluateCallMining": {
+                "Type": "Task",
+                "Resource": "${BedrockEvaluateFunction.Arn}",
+                "Next": "BeforeStoreResponse",
+                "Retry": [
+                  {
+                    "ErrorEquals": ["States.Timeout", "Lambda.ServiceException"],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                  }
+                ],
+                "Catch": [
+                  {
+                    "ErrorEquals": ["States.ALL"],
+                    "ResultPath": "$.EvaluateCallMiningError",
+                    "Next": "StoreResponse"
+                  }
+                ]
+              },
+              "BeforeEvaluatePostCallSurvey": {
+                "Type": "Pass",
+                "Parameters": {
+                  "timestamp.$": "$$.State.EnteredTime",
+                  "stage": "Starting Bedrock Post Call Survey Analysis",
+                  "executionId.$": "$$.Execution.Id"
+                },
+                "ResultPath": "$.monitoring.bedrock.postCall.start",
+                "Next": "BedrockEvaluatePostCallSurvey"
+              },
+              "BeforeStoreResponse": {
+                "Type": "Pass",
+                "Parameters": {
+                  "timestamp.$": "$$.State.EnteredTime",
+                  "stage": "Starting Response Storage",
+                  "hasError": {
+                    "States.Or": [
+                      {"States.IsPresent": ["$.ComprehendError"]},
+                      {"States.IsPresent": ["$.EvaluateCallMiningError"]},
+                      {"States.IsPresent": ["$.EvaluatePostCallError"]}
+                    ]
+                  },
+                  "dataSize": {
+                    "States.StringLength": [{"States.JsonToString": ["$.bedrockResult"]}]
+                  }
+                },
+                "ResultPath": "$.monitoring.storage.start",
+                "Next": "StoreResponse"
+              },
+              "StoreResponse": {
+                "Type": "Task",
+                "Resource": "${StoreResponseFunction.Arn}",
+                "Next": "AfterStoreResponse"
+              },
+              "AfterStoreResponse": {
+                "Type": "Pass",
+                "Parameters": {
+                  "timestamp.$": "$$.State.EnteredTime",
+                  "stage": "Completed Response Storage",
+                  "duration": {
+                    "States.TimestampDiff": ["$.monitoring.storage.start.timestamp", "$$.State.EnteredTime", "Seconds"]
+                  }
+                },
+                "ResultPath": "$.monitoring.storage.end",
+                "End": true
+              },
+              "FailedState": {
+                "Type": "Fail"
+              }
+            }
+          }
+  WaitForTranscribeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub wait-for-transcribe-${Environment}
+      Description: Attend la fin du job Transcribe
+      Handler: index.handler
+      Runtime: nodejs18.x
+      MemorySize: 256
+      Timeout: 60
+      Role: !GetAtt WaitForTranscribeFunctionRole.Arn
+      Code:
+        S3Bucket: "quality-pro-cfn-templates"
+        S3Key: lambdas/wait_for_transcribe.zip
+      Environment:
+        Variables:
+          ENV: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+        - Key: Owner
+          Value: !Ref Owner
+
+  WaitForTranscribeFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonTranscribeFullAccess
+
+  WaitForTranscribeLambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub wait-for-transcribe-policy-${Environment}
+      Roles:
+        - !Ref WaitForTranscribeFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - transcribe:GetTranscriptionJob
+            Resource: '*'
+
+Outputs:
+  FileProcessingQueueUrl:
+    Description: File Processing Queue Url
+    Value: !GetAtt FileProcessingQueue.QueueUrl
+  FileProcessingDLQUrl:
+    Description: File Processing DLQ Url
+    Value: !GetAtt FileProcessingDLQ.QueueUrl
+  FileProcessingFunctionArn:
+    Description: File Processing Function Arn
+    Value: !GetAtt FileProcessingFunction.Arn
+  FileProcessingQueueArn:
+    Description: The ARN of the file processing queue
+    Value: !GetAtt FileProcessingQueue.Arn
+  GetTranscriptFunctionArn:
+    Description: Get Transcript Lambda Function Arn
+    Value: !GetAtt GetTranscriptFunction.Arn
+  StepFunctionTriggerFunctionArn:
+    Description: Step Function Trigger Lambda Function Arn
+    Value: !GetAtt StepFunctionTriggerFunction.Arn
+  StepFunctionStateMachineArn:
+    Description: Step Function State Machine Arn
+    Value: !Ref StepFunctionStateMachine
+  ComprehendFunctionArn:
+    Description: Comprehend Analysis Function Arn
+    Value: !GetAtt ComprehendFunction.Arn
+  BucketAudioStorage:
+    Description: Audio Storage Bucket Name
+    Value: !Ref AudioBucket
