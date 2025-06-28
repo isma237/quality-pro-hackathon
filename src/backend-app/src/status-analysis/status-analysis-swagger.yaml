@@ -1,0 +1,68 @@
+openapi: 3.0.3
+info:
+  title: Quality Pro API
+  version: 1.0.0
+
+servers:
+  - url:  https://doi6w9idtk.execute-api.us-west-2.amazonaws.com/Prod
+    description: Prod API Gateway Endpoint
+paths:
+  /analysis/{campaignId}/{fileName}:
+    get:
+      summary: Récupérer le statut d’analyse d’un audio
+      description: Retourne le statut d’analyse d’un fichier audio pour une campagne donnée.
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: L’identifiant unique de la campagne
+        - name: fileName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Le nom du fichier audio
+      responses:
+        '200':
+          description: Statut de l’analyse récupéré avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fileName:
+                    type: string
+                  campaignId:
+                    type: string
+                  status:
+                    type: string
+                    description: Statut de l’analyse (COMPLETE, RUNNING, FAILED, etc.)
+                  startTime:
+                    type: string
+                    format: date-time
+                  lastUpdated:
+                    type: string
+                    format: date-time
+                  output:
+                    type: object
+                    nullable: true
+        '404':
+          description: Audio non trouvé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '500':
+          description: Erreur serveur
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string

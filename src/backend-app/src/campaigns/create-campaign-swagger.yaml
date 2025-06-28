@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: Quality Pro API
+  version: 1.0.0
+
+servers:
+  - url:  https://doi6w9idtk.execute-api.us-west-2.amazonaws.com/Prod
+    description: Prod API Gateway Endpoint
+paths:
+  /campaigns:
+    post:
+      summary: Créer une campagne
+      description: Crée une nouvelle campagne et initialise les dossiers S3 associés.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - objective
+                - description
+                - date
+                - segment
+              properties:
+                name:
+                  type: string
+                  example: "Campagne Printemps"
+                objective:
+                  type: string
+                  example: "Augmenter la satisfaction client"
+                description:
+                  type: string
+                  example: "Campagne de test pour le printemps"
+                date:
+                  type: string
+                  example: "2025-04-27"
+                segment:
+                  type: string
+                  example: "B2C"
+      responses:
+        '200':
+          description: Campagne créée avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Id:
+                    type: string
+                    description: Identifiant unique de la campagne
+                  name:
+                    type: string
+                  objective:
+                    type: string
+                  description:
+                    type: string
+                  date:
+                    type: string
+                  segment:
+                    type: string
+                  METADATA:
+                    type: string
+        '500':
+          description: Erreur serveur
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string

@@ -1,0 +1,4 @@
+{
+    "httpMethod": "POST",
+    "body": "{\"name\":\"Test\",\"objective\":\"TestObj\",\"description\":\"Desc\",\"date\":\"2024-04-26\",\"segment\":\"Support\"}"
+}

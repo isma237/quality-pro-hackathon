@@ -1,0 +1,19 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "quality-pro-backend"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-1c6me9d1nzoxu"
+s3_prefix = "quality-pro-backend"
+region = "us-west-2"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+confirm_changeset = false
+no_fail_on_empty_changeset = true
+
+[default.deploy.fast_mode]
+change_detection_mode = "code-only"
+
+[default.build.parameters]
+cached = true
+parallel = true

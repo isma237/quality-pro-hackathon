@@ -1,0 +1,148 @@
+openapi: 3.0.3
+info:
+  title: Quality Pro API
+  version: 1.0.0
+
+servers:
+  - url:  https://doi6w9idtk.execute-api.us-west-2.amazonaws.com/Prod
+    description: Prod API Gateway Endpoint
+paths:
+  /campaigns/{campaignId}/audio:
+    post:
+      summary: Importer un fichier audio dans une campagne
+      description: Ajoute un enregistrement audio à une campagne existante.
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: L’identifiant unique de la campagne
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fileName
+                - duration
+                - audioLinkUrl
+              properties:
+                fileName:
+                  type: string
+                  example: "audio1.mp3"
+                duration:
+                  type: string
+                  example: "00:03:45"
+                audioLinkUrl:
+                  type: string
+                  example: "https://bucket.s3.amazonaws.com/campaign/audio/audio1.mp3"
+      responses:
+        '200':
+          description: Audio importé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Id:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+                  duration:
+                    type: string
+                  audioLinkUrl:
+                    type: string
+                  METADATA:
+                    type: string
+                  s3Path:
+                    type: string
+        '404':
+          description: Campagne non trouvée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '500':
+          description: Erreur serveur
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+  post:
+    summary: Importer un fichier audio dans une campagne
+    description: Ajoute un enregistrement audio à une campagne existante.
+    parameters:
+      - name: campaignId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: L’identifiant unique de la campagne
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - fileName
+              - duration
+              - audioLinkUrl
+            properties:
+              fileName:
+                type: string
+                example: "audio1.mp3"
+              duration:
+                type: string
+                example: "00:03:45"
+              audioLinkUrl:
+                type: string
+                example: "https://bucket.s3.amazonaws.com/campaign/audio/audio1.mp3"
+    responses:
+      '200':
+        description: Audio importé avec succès
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Id:
+                  type: string
+                createdAt:
+                  type: string
+                  format: date-time
+                duration:
+                  type: string
+                audioLinkUrl:
+                  type: string
+                METADATA:
+                  type: string
+                s3Path:
+                  type: string
+      '404':
+        description: Campagne non trouvée
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string
+      '500':
+        description: Erreur serveur
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string

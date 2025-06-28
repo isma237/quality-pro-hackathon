@@ -1,0 +1,341 @@
+# This is the SAM template that represents the architecture of your serverless application
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-template-basics.html
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  backend
+
+Transform:
+- AWS::Serverless-2016-10-31
+
+Parameters:
+  StateMachineName:
+    Type: String
+    Default: file-processing-statemachine-dev
+    Description: "Name of the Step Function State Machine"
+  BucketName:
+    Type: String
+    Default: quality-pro-a-audio-dev
+    Description: "Name of the S3 bucket to store audio files"
+  DynamoDbTable:
+    Type: String
+    Default: CampaignsTable
+    Description: "Name of the DynamoDB table to store campaigns"
+
+Resources:
+  MyBackendApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowOrigin: "'*'"
+        AllowHeaders: "'Content-Type, Authorization'"
+  
+  CreateCampaignFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: create.handler
+      Runtime: nodejs18.x
+      CodeUri: src/campaigns
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+        - S3CrudPolicy:
+            BucketName: !Ref BucketName
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+          BUCKET_NAME: !Ref BucketName
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns
+            Method: POST
+            RestApiId: !Ref MyBackendApi
+  
+  GetAllCampaignsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: get-all.handler
+      Runtime: nodejs18.x
+      CodeUri: src/campaigns
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns
+            Method: GET
+            RestApiId: !Ref MyBackendApi
+
+  ImportAudioFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: import.handler
+      Runtime: nodejs18.x
+      CodeUri: src/audio
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns/{campaignId}/import-audio
+            Method: POST
+            RestApiId: !Ref MyBackendApi
+
+  GetAllAudioForCampaignFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: get-audios-campaign.handler
+      Runtime: nodejs18.x
+      Timeout: 30
+      CodeUri: src/audio
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+        - S3CrudPolicy:
+            BucketName: !Ref BucketName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - states:DescribeExecution
+              Resource: "*"
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+          BUCKET_NAME: !Ref BucketName
+          STATE_MACHINE_ARN: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${StateMachineName}
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns/{campaignId}/get-audios
+            Method: GET
+            RestApiId: !Ref MyBackendApi
+
+  GenerateAudiosCsvFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Timeout: 180
+      CodeUri: src/reports
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+        - S3CrudPolicy:
+            BucketName: !Ref BucketName
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+          BUCKET_NAME: !Ref BucketName
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns/{campaignId}/export-csv
+            Method: GET
+            RestApiId: !Ref MyBackendApi
+
+  EvaluateBilanPostCallSurveyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: pcs-bilan-campaign.handler
+      Runtime: nodejs18.x
+      Timeout: 90
+      CodeUri: src/reports
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns/{campaignId}/post-call-survey-bilan-campaign
+            Method: GET
+            RestApiId: !Ref MyBackendApi
+
+
+  EntryCallBilanCampaignFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: entry-call-bilan-campaign.handler
+      Runtime: nodejs18.x
+      Timeout: 90
+      CodeUri: src/reports
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns/{campaignId}/entry-call-bilan-campaign
+            Method: GET
+            RestApiId: !Ref MyBackendApi
+
+  GetSpecificAudioForCampaignFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: get-audio.handler
+      Runtime: nodejs18.x
+      CodeUri: src/audio
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+        - S3CrudPolicy:
+            BucketName: !Ref BucketName
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+          BUCKET_NAME: !Ref BucketName
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns/{campaignId}/get-audios/{audioId}
+            Method: GET
+            RestApiId: !Ref MyBackendApi
+
+  GeneratePresignedUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.handler
+      Runtime: nodejs18.x
+      CodeUri: src/generate-presign-url
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:PutObjectAcl
+              Resource: !Sub "arn:aws:s3:::${BucketName}/*"
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref BucketName
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /campaigns/{campaignId}/generate-presigned-url
+            Method: POST
+            RestApiId: !Ref MyBackendApi
+
+  GetAnalysisStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: check-status.handler
+      Runtime: nodejs18.x
+      CodeUri: src/status-analysis
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CampaignsTable
+          STATE_MACHINE_ARN: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${StateMachineName}
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CampaignsTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - states:*
+              Resource: 
+                - "*"
+      Events:
+        ApiEvents:
+          Type: Api
+          Properties:
+            Path: /analysis/{campaignId}/{fileName}
+            Method: GET
+            RestApiId: !Ref MyBackendApi
+
+  CampaignsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DynamoDbTable
+      AttributeDefinitions:
+        - AttributeName: Id
+          AttributeType: S
+        - AttributeName: METADATA
+          AttributeType: S
+      KeySchema:
+        - AttributeName: Id
+          KeyType: HASH
+        - AttributeName: METADATA
+          KeyType: RANGE  
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: MetadataIndex
+          KeySchema:
+            - AttributeName: METADATA
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+Outputs:
+  CampaignsTable:
+    Description: "Name of DynamoDB table"
+    Value: !Ref CampaignsTable
+  ApiGateWay:
+    Description: "API Gateway endpoint URL for Prod stage for the Prod environment"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  CreateCampaignFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the CreateCampaignFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns"
+  GetAllCampaignsFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the GetAllCampaignsFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns"
+  GeneratePresignedUrlFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the GeneratePresignedUrlFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns/{CAMPAIGN_ID}/generate-presign-url"
+  ImportAudioFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the ImportAudioFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns/{CAMPAIGN_ID}/import-audio"
+  GetAllAudioForCampaignFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the GetAllAudioForCampaignFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns/{CAMPAIGN_ID}/get-audios"
+  GetSpecificAudioForCampaignFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the GetAudioForCampaignFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns/{CAMPAIGN_ID}/get-audios/{AUDIO_ID}"
+  CheckStatusFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the CheckStatusFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/analysis/{CAMPAIGN_ID}/{FILE_NAME}"
+  GenerateAudiosCsvFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the GenerateAudiosCsvFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns/{CAMPAIGN_ID}/export-csv"
+  EvaluateBilanPostCallSurveyFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the EvaluateBilanPostCallSurveyFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns/{CAMPAIGN_ID}/post-call-survey-bilan-campaign"
+  EntryCallBilanCampaignFunctionEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for the EntryCallBilanCampaignFunction"
+    Value: !Sub "https://${MyBackendApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/campaigns/{CAMPAIGN_ID}/entry-call-bilan-campaign"

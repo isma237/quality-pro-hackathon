@@ -1,0 +1,69 @@
+openapi: 3.0.3
+info:
+  title: Quality Pro API
+  version: 1.0.0
+
+servers:
+  - url:  https://doi6w9idtk.execute-api.us-west-2.amazonaws.com/Prod
+    description: Prod API Gateway Endpoint
+paths:
+  /campaigns/{campaignId}/generate-presigned-url:
+    post:
+      summary: Générer des URLs présignées pour l’upload d’audios
+      description: Retourne une liste d’URLs S3 présignées pour permettre l’upload de fichiers audio dans une campagne.
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: L’identifiant unique de la campagne
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fileNames
+              properties:
+                fileNames:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - fileName
+                      - ContentType
+                    properties:
+                      fileName:
+                        type: string
+                        example: "audio1.mp3"
+                      ContentType:
+                        type: string
+                        example: "audio/mpeg"
+                campaignName:
+                  type: string
+                  example: "Campagne Printemps"
+      responses:
+        '200':
+          description: Liste des URLs présignées générées
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    fileName:
+                      type: string
+                    url:
+                      type: string
+        '500':
+          description: Erreur serveur
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
