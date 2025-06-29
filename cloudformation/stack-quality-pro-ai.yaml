@@ -22,6 +22,14 @@ Parameters:
     Type: String
     Default: quality-pro-lambda-artifacts-${Environment}
     Description: Name of the S3 bucket for Lambda artifacts
+  SQSQueueName:
+    Type: String
+    Default: file-processing-queue-${Environment}
+    Description: Name of the SQS queue for file processing
+  DLQName:
+    Type: String
+    Default: file-processing-dlq-${Environment}
+    Description: Name of the Dead Letter Queue for file processing
   Owner:
     Type: String
     Default: quality-team
@@ -110,7 +118,7 @@ Resources:
   FileProcessingQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub '${Project}-file-processing-queue-${Environment}-${AWS::AccountId}'
+      QueueName: !Ref SQSQueueName
       VisibilityTimeout: 100
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt FileProcessingDLQ.Arn
@@ -158,7 +166,7 @@ Resources:
   FileProcessingDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${Project}-file-processing-dlq-${Environment}
+      QueueName: !Ref DLQName
       VisibilityTimeout: 300
       Tags:
         - Key: Environment

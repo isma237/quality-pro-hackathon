@@ -5,6 +5,8 @@ UNIQUE_ID=$(date +%s | cut -c 6-10)
 ENV_TYPE="isma-dev"
 DEPLOYMENT_BUCKET="quality-pro-deployment-artifacts-$(date +%s)"
 STACK_NAME="quality-pro-stack-${ENV_TYPE}-${UNIQUE_ID}"
+SQS_QUEUE_NAME="file-processing-queue-${ENV_TYPE}-${UNIQUE_ID}"
+DLQ_NAME="file-processing-dlq-${ENV_TYPE}-${UNIQUE_ID}"
 SAM_STACK_NAME="quality-pro-backend-${ENV_TYPE}-${UNIQUE_ID}"
 PROJECT_NAME="quality-pro-cmr"
 OWNER="ismael-gadji-cmr"
@@ -58,7 +60,10 @@ aws cloudformation deploy \
   --template-file packaged-template.yml \
   --stack-name $STACK_NAME \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-  --parameter-overrides Environment=$ENV_TYPE DeploymentId=$UNIQUE_ID Project=$PROJECT_NAME Owner=$OWNER AudioBucketName=$BUCKET_NAME StateMachineName=$STATE_MACHINE_NAME TABLENAME=$DYNAMO_TABLE_NAME BucketForLambdaArtefact=$DEPLOYMENT_BUCKET
+  --parameter-overrides Environment=$ENV_TYPE DeploymentId=$UNIQUE_ID Project=$PROJECT_NAME \
+    Owner=$OWNER AudioBucketName=$BUCKET_NAME StateMachineName=$STATE_MACHINE_NAME \
+    TABLENAME=$DYNAMO_TABLE_NAME BucketForLambdaArtefact=$DEPLOYMENT_BUCKET \
+    SQSQueueName=$SQS_QUEUE_NAME DLQName=$DLQ_NAME
 
 # Check if CloudFormation deployment was successful
 if [ $? -ne 0 ]; then
