@@ -2,4 +2,3 @@
 **/.aws-sam
 **/node_modules
 **/*.zip
-src/lambda-infra/audio/*.zip
