@@ -94,25 +94,6 @@ The application is built on a fully serverless architecture:
 - **AWS SAM**: Serverless Application Model for API development
 - **API Gateway**: RESTful API endpoints
 
-## Deployment
-
-The backend application can be deployed using AWS SAM and CloudFormation:
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/quality-pro.git
-cd quality-pro
-
-# Deploy the infrastructure
-cd cloudformation
-./deploy.sh
-
-# Deploy the backend API
-cd ../src/backend-app
-sam build
-sam deploy --guided
-```
-
 ## Call Analysis Workflow
 
 The Quality Pro application features a modern serverless audio analysis workflow that leverages AWS Step Functions to orchestrate a series of Lambda functions. Here's how the process works:
