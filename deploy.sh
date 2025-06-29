@@ -32,8 +32,6 @@ chmod +x publish_lamba.sh
 ./publish_lamba.sh
 cd ../../../cloudformation
 
-cd cloudformation
-
 # Check CloudFormation stack status
 STACK_STATUS=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].StackStatus" --output text 2>/dev/null || echo "DOES_NOT_EXIST")
 

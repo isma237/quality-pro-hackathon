@@ -241,6 +241,108 @@ Initially developed to address telecommunications call center needs in Cameroon,
 
 - **Built for AWS Lambda:** Every core process leverages Lambda’s strengths scalability, event-driven execution, and seamless integration with other AWS services.
 
+
+## Deployment & Testing
+
+### Prerequisites
+
+Before deploying, ensure you have:
+
+- AWS CLI installed and configured with appropriate permissions
+- AWS SAM CLI installed
+- Bash shell (Linux/macOS/WSL)
+- Access to an AWS account with permissions for Lambda, S3, DynamoDB, Step Functions, SQS, Bedrock and Haiku etc.
+
+### Quick Start Deployment
+
+The project includes an automated deployment script that sets up the entire infrastructure:
+
+```bash
+# Clone the repository
+git clone https://github.com/isma237/quality-pro-hackathon.git
+cd quality-pro
+
+# Make the deployment script executable
+chmod +x deploy.sh
+
+# Run the deployment (creates unique resources with timestamps)
+./deploy.sh
+```
+
+### What the Deployment Script Does
+
+The `deploy.sh` script automatically:
+
+1. **Creates unique resource names** with timestamps to avoid conflicts
+2. **Sets up a temporary S3 bucket** for deployment artifacts
+3. **Packages and uploads Lambda functions** to S3
+4. **Deploys the CloudFormation stack** with all AWS infrastructure:
+   - Lambda functions for audio processing and AI analysis
+   - Step Functions workflow for orchestration
+   - DynamoDB table for storing results
+   - S3 bucket for audio files and transcripts
+   - SQS queues for reliable message processing
+5. **Deploys the SAM backend API** with all REST endpoints
+6. **Displays deployment outputs** with resource names and URLs
+
+### Deployment Output Example
+
+After successful deployment, you'll see output similar to:
+
+```bash
+=== Deployment Information ===
+CloudFormation Stack: quality-pro-stack-isma-dev-12345
+SAM Stack: quality-pro-backend-isma-dev-12345
+S3 Bucket: quality-pro-audio-isma-dev-12345
+DynamoDB Table: CampaignsTable-isma-dev-12345
+State Machine: file-processing-statemachine-isma-dev-12345
+```
+
+### Testing with the Web Application
+
+The project includes a complete web application already deployed and connected to API Gateway for end-to-end testing.
+
+#### **Access the Live Web Application**
+
+🌐 **Application URL**: https://quality-pro-ai.rgotn1ka5iccm.us-west-2.cs.amazonlightsail.com/
+
+#### **Test Credentials**
+
+Use the following credentials to log into the application:
+
+**Test Account:**
+- **Email**: `test@qualitypro.ai`
+- **Password**: `QualityPro2025!`
+
+
+#### **End-to-End Testing Workflow**
+
+Once logged in, follow this complete testing workflow:
+
+1. **Explore Existing Campaigns**
+   - Navigate to "Campagnes d'analyses audio"
+   - Review pre-loaded campaigns like "CSAT#Juin2025" and "SuperTestA"
+   - Click "Consulter la campagne" to view detailed analytics
+
+2. **Review Sample Analytics**
+   - Check campaign dashboards with real metrics:
+     - Call resolution rates (18.2% in sample data)
+     - Quality scores (3.3/10 average)
+     - Customer satisfaction distribution
+     - Agent performance indicators
+   - Explore individual call analysis with AI insights
+
+3. **Create Your Own Campaign**
+   - Click "Créer une nouvelle campagne"
+   - Choose campaign type:
+     - **"Analyse des Appels Entrants"** for call center conversations
+     - **"Post Call Survey"** for customer feedback analysis
+   - Fill campaign details:
+
+4. **Upload Test Audio Files**
+   
+   Use the provided sample files from the `test_data` folder:
+
 ## Contributors
 
 - Ismael Gadji 🇨🇲 - Lead Developer and Technical Trainer in Cameroon
